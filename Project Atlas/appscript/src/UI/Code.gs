@@ -1,0 +1,3 @@
+function doGet() { return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('VMOS MVP').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); }
+function getMvpBootstrap() { try { var data = {}; ['Customer', 'RFQ', 'Quote', 'Job', 'Invoice'].forEach(function (entity) { data[entity] = new MvpService(entity).list(); }); return { ok: true, data: data }; } catch (error) { return toClientError_(error); } }
+function createMvpRecord(entity, input) { try { if (['Customer', 'RFQ', 'Quote', 'Job', 'Invoice'].indexOf(entity) === -1) throw new VmosValidationError('Unsupported entity.'); return { ok: true, data: new MvpService(entity).create(input) }; } catch (error) { return toClientError_(error); } }

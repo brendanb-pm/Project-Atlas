@@ -1,0 +1,11 @@
+<!doctype html><html><head><base target="_top"><style>body{font:14px Arial;margin:20px;max-width:960px}fieldset{margin:12px 0;padding:12px}input,select,button{margin:4px;padding:7px}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #ddd;padding:6px;text-align:left}.error{color:#a00;white-space:pre-wrap}</style></head><body>
+<h1>VMOS MVP</h1><p>Customer → RFQ → Quote → Job → Invoice</p><div id="message" class="error"></div><div id="forms"></div><div id="lists"></div>
+<script>
+const config={Customer:[['name','Customer name'],['email','Email'],['phone','Phone']],RFQ:[['customerId','Customer ID'],['description','Description'],['dueDate','Due date']],Quote:[['rfqId','RFQ ID'],['customerId','Customer ID (optional)'],['amount','Amount']],Job:[['quoteId','Quote ID'],['customerId','Customer ID (optional)'],['name','Job name (optional)'],['dueDate','Due date']],Invoice:[['jobId','Job ID'],['customerId','Customer ID (optional)'],['amount','Amount'],['dueDate','Due date']]};
+function form(entity){return '<fieldset><legend>New '+entity+'</legend><form onsubmit="submitForm(event,\''+entity+'\')">'+config[entity].map(x=>'<label>'+x[1]+' <input name="'+x[0]+'"></label>').join('')+'<button>Create</button></form></fieldset>'}
+function submitForm(event,entity){event.preventDefault();let input=Object.fromEntries(new FormData(event.target));google.script.run.withSuccessHandler(result=>{if(!result.ok)return show(result.error.message);event.target.reset();load();}).createMvpRecord(entity,input)}
+function show(message){document.querySelector('#message').textContent=message||''}
+function load(){google.script.run.withSuccessHandler(result=>{if(!result.ok)return show(result.error.message);show('');let data=result.data;document.querySelector('#lists').innerHTML=Object.keys(data).map(e=>'<h2>'+e+'s</h2>'+table(data[e])).join('')}).getMvpBootstrap()}
+function table(rows){if(!rows.length)return '<p>No records.</p>';let keys=Object.keys(rows[0]);return '<table><thead><tr>'+keys.map(k=>'<th>'+k+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+keys.map(k=>'<td>'+String(r[k]??'')+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
+document.querySelector('#forms').innerHTML=Object.keys(config).map(form).join('');load();
+</script></body></html>
