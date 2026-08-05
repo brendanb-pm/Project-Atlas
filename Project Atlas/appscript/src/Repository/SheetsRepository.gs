@@ -25,7 +25,7 @@ SheetsRepository.prototype.assertWritable_ = function (data, mapping) {
 SheetsRepository.prototype.toDomain_ = function (row, mapping) {
   var output = {};
   Object.keys(mapping).forEach(function (logical) { output[logical] = row[mapping[logical].column - 1]; });
-  return output;
+  return serializeVmosValue_(output);
 };
 SheetsRepository.prototype.list = function () {
   var sheet = this.getSheet_(), mapping = this.headerMap_(), lastRow = sheet.getLastRow();
