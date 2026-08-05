@@ -16,6 +16,15 @@ context.createRepository_ = (entity) => ({
   findById: (id) => { const item = records[entity].find((r) => r.id === id); if (!item) throw new context.VmosNotFoundError('missing'); return item; },
   insert: (item) => { records[entity].push({ ...item }); return item; }
 });
+function nextId(prefix, ids) { return context.generateVmosId_(prefix, { list: () => ids.map((id) => ({ id })) }); }
+assert.equal(nextId('RFQ', ['rfq 26-0127']), 'RFQ-26-0128');
+assert.equal(nextId('RFQ', ['RFQ-26-0127']), 'RFQ-26-0128');
+assert.equal(nextId('RFQ', ['rfq 26-0009', 'RFQ-26-0127', 'rFq - 26 - 0126']), 'RFQ-26-0128');
+assert.equal(nextId('RFQ', ['RFQ-26-12X7', 'RFQ-25-9999', 'NOT-AN-ID', 'RFQ26-9999']), 'RFQ-26-0001');
+assert.equal(nextId('CUST', ['cust 26-0000']), 'CUST-26-0001');
+assert.equal(nextId('VQT', ['vqt 26-0127']), 'VQT-26-0128');
+assert.equal(nextId('JOB', ['job 26-0127']), 'JOB-26-0128');
+assert.equal(nextId('INV', ['inv 26-0127']), 'INV-26-0128');
 const customer = new context.MvpService('Customer').create({ name: 'Acme' });
 assert.equal(customer.id, 'CUST-26-0001');
 assert.equal(customer.createdBy, 'operator@example.com');
