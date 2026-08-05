@@ -33,14 +33,30 @@ SheetsRepository.prototype.list = function () {
   return sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues().map(function (row) { return this.toDomain_(row, mapping); }, this).filter(function (row) { return row.id; });
 };
 SheetsRepository.prototype.findById = function (id) {
-  var record = this.list().filter(function (row) { return String(row.id) === String(id); })[0];
-  if (!record) throw new VmosNotFoundError(this.entityName + ' ' + id + ' was not found.');
-  return record;
+  return this.findRowById_(id).record;
+};
+SheetsRepository.prototype.findRowById_ = function (id) {
+  var sheet = this.getSheet_(), mapping = this.headerMap_(), lastRow = sheet.getLastRow();
+  if (!mapping.id) throw new VmosConfigurationError('Primary-key mapping for ' + this.entityName + ' is missing.');
+  if (lastRow < 2) throw new VmosNotFoundError(this.entityName + ' ' + id + ' was not found.');
+  var rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  for (var index = 0; index < rows.length; index += 1) {
+    if (String(rows[index][mapping.id.column - 1]) === String(id)) return { sheet: sheet, mapping: mapping, rowNumber: index + 2, record: this.toDomain_(rows[index], mapping) };
+  }
+  throw new VmosNotFoundError(this.entityName + ' ' + id + ' was not found.');
 };
 SheetsRepository.prototype.insert = function (data) {
   var sheet = this.getSheet_(), mapping = this.headerMap_(); this.assertWritable_(data, mapping);
   var row = new Array(sheet.getLastColumn()).fill('');
   Object.keys(data).forEach(function (logical) { row[mapping[logical].column - 1] = data[logical]; });
   sheet.appendRow(row); return this.findById(data.id);
+};
+SheetsRepository.prototype.updateById = function (id, changes) {
+  if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError('Primary key cannot be changed.');
+  var located = this.findRowById_(id); this.assertWritable_(changes, located.mapping);
+  Object.keys(changes).forEach(function (logical) {
+    located.sheet.getRange(located.rowNumber, located.mapping[logical].column).setValue(changes[logical]);
+  });
+  return this.findById(id);
 };
 function createRepository_(entityName) { var config = getVmosConfig_(); if (!config.mapping[entityName]) throw new VmosConfigurationError('No mapping configured for ' + entityName + '.'); return new SheetsRepository(entityName, config.mapping[entityName], SpreadsheetApp.openById(config.spreadsheetId)); }

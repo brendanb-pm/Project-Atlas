@@ -1,6 +1,18 @@
 function MvpService(entityName) { this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = createRepository_(entityName); }
 MvpService.prototype.list = function () { return this.repository.list(); };
 MvpService.prototype.get = function (id) { return this.repository.findById(id); };
+MvpService.prototype.update = function (id, changes) {
+  if (!id) throw new VmosValidationError('Record ID is required.');
+  changes = changes || {};
+  if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError('Primary key cannot be changed.');
+  var existing = this.get(id), proposed = {};
+  Object.keys(existing).forEach(function (key) { proposed[key] = existing[key]; });
+  Object.keys(changes).forEach(function (key) { proposed[key] = changes[key]; });
+  validateEntityInput_(this.definition, proposed); this.validateRelationships_(proposed);
+  if (this.definition.fields.updatedAt) changes.updatedAt = new Date();
+  if (this.definition.fields.updatedBy) changes.updatedBy = getVmosAuditUser_();
+  return this.repository.updateById(id, changes);
+};
 MvpService.prototype.create = function (input) {
   input = input || {};
   // HTML forms submit blank optional controls. Remove them before validating the

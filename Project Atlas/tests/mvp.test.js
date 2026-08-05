@@ -14,7 +14,8 @@ context.getVmosConfig_ = () => ({ mapping });
 context.createRepository_ = (entity) => ({
   list: () => records[entity].slice(),
   findById: (id) => { const item = records[entity].find((r) => r.id === id); if (!item) throw new context.VmosNotFoundError('missing'); return item; },
-  insert: (item) => { records[entity].push({ ...item }); return item; }
+  insert: (item) => { records[entity].push({ ...item }); return item; },
+  updateById: (id, changes) => { if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new context.VmosValidationError('Primary key cannot be changed.'); const item = records[entity].find((r) => r.id === id); if (!item) throw new context.VmosNotFoundError('missing'); Object.keys(changes).forEach((key) => { item[key] = changes[key]; }); return item; }
 });
 function nextId(prefix, ids) { return context.generateVmosId_(prefix, { list: () => ids.map((id) => ({ id })) }); }
 assert.equal(nextId('RFQ', ['rfq 26-0127']), 'RFQ-26-0128');
@@ -29,6 +30,13 @@ const customer = new context.MvpService('Customer').create({ name: 'Acme' });
 assert.equal(customer.id, 'CUST-26-0001');
 assert.equal(customer.createdBy, 'operator@example.com');
 const rfq = new context.MvpService('RFQ').create({ customerId: customer.id, description: 'Bracket' });
+const updatedRfq = new context.MvpService('RFQ').update(rfq.id, { description: 'Revised bracket' });
+assert.equal(updatedRfq.id, rfq.id);
+assert.equal(updatedRfq.description, 'Revised bracket');
+assert.equal(updatedRfq.status, 'Received');
+assert.equal(updatedRfq.updatedBy, 'operator@example.com');
+assert.throws(() => new context.MvpService('RFQ').update(rfq.id, { id: 'RFQ-26-9999' }), /Primary key/);
+assert.throws(() => new context.MvpService('RFQ').update(rfq.id, { description: '' }), /required/);
 const quote = new context.MvpService('Quote').create({ rfqId: rfq.id });
 const job = new context.MvpService('Job').create({ quoteId: quote.id });
 const invoice = new context.MvpService('Invoice').create({ jobId: job.id, total: 1250 });
