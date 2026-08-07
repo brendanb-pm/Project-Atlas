@@ -1,4 +1,6 @@
 function doGet(e) {
+  if (e && e.parameter && e.parameter.dashboard === '1') return HtmlService.createTemplateFromFile('UI/OperationsDashboard').evaluate().setTitle('VMOS Operations Dashboard').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  if (e && e.parameter && e.parameter.traveler === '1') return HtmlService.createTemplateFromFile('UI/Traveler').evaluate().setTitle('VMOS Job Traveler').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.shop === '1') return HtmlService.createTemplateFromFile('UI/ShopFloor').evaluate().setTitle('VMOS Shop Floor').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   return HtmlService.createTemplateFromFile('UI/Index').evaluate().setTitle('VMOS MVP').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -12,3 +14,6 @@ function transitionShopFloorJob(jobId, targetStatus, commandId, notes) { try { r
 function reportJobProblem(jobId, payload, commandId) { try { return { ok: true, data: new ShopFloorService().reportProblem(jobId, payload, commandId) }; } catch (error) { return toClientError_(error); } }
 function resolveJobBlock(jobId, payload, commandId) { try { return { ok: true, data: new ShopFloorService().resolveBlock(jobId, payload, commandId) }; } catch (error) { return toClientError_(error); } }
 function listJobEvents(jobId) { try { return { ok: true, data: new ShopFloorService().listEvents(jobId) }; } catch (error) { return toClientError_(error); } }
+function getTravelerPrintData(token) { try { return { ok: true, data: new ShopFloorService().getTravelerData(token) }; } catch (error) { return toClientError_(error); } }
+function getShopDashboard() { try { return { ok: true, data: new ShopDashboardService().getLiveWip() }; } catch (error) { return toClientError_(error); } }
+function getShopOperatorWorkloads() { try { return { ok: true, data: new ShopDashboardService().listOperatorWorkloads() }; } catch (error) { return toClientError_(error); } }

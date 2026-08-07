@@ -56,3 +56,35 @@ https://YOUR_WEB_APP_EXEC_URL?shop=1&qr=THE_RETURNED_QR_TOKEN
 ```
 
 The shop-floor screen resolves that token server-side, shows the current Job and permitted transitions, and records every command with an idempotency key. `STOP / PROBLEM` changes the existing `Jobs.Status` to `BLOCKED` and appends the reason and context to `JobEvents`; it does not delete or overwrite history. To set different workflows in the future without editing code, set the optional script property `VMOS_WORKFLOW_TEMPLATES` to a JSON object matching `VMOS_DEFAULT_WORKFLOW_TEMPLATES` in `Utilities/WorkflowConfig.gs`.
+
+## Pass 2 visibility and paper fallback
+
+Pass 2 adds no worksheets and makes no production writes. It provides these read-only routes after web-app deployment:
+
+| Route | Purpose |
+|---|---|
+| `YOUR_WEB_APP_EXEC_URL?dashboard=1` | Operations visibility: active/ready/blocked/due job counts, workflow exceptions, linked quote/invoice/payment visibility, and operator actionable-workload summaries |
+| `YOUR_WEB_APP_EXEC_URL?traveler=1&qr=OPAQUE_TOKEN` | Printable Letter job traveler and reprint view for an existing active QR token |
+
+Set the Apps Script project timezone to the shop's business timezone before relying on Due Today or Due This Week. The dashboard deliberately treats unknown statuses as neither ready nor complete. To classify readiness without changing code, set `VMOS_DASHBOARD_STATUS_CATEGORIES` to a reviewed JSON value, for example:
+
+```json
+{
+  "MACHINING": {
+    "readyStatuses": ["QUEUED"],
+    "blockedStatuses": ["BLOCKED"],
+    "completedStatuses": ["COMPLETE"]
+  },
+  "CERAKOTE": {
+    "readyStatuses": ["READY_TO_COAT"],
+    "blockedStatuses": ["BLOCKED"],
+    "completedStatuses": ["COMPLETE"]
+  }
+}
+```
+
+Review those ready-status values with operations before setting them; they are examples, not an assertion about every shop's workflow. Jobs without an active QR/workflow assignment are reported as needing classification rather than silently included in ready work.
+
+The current production schema has no authoritative job order-value field. Therefore, the dashboard does **not** calculate or label `Open Order Value`, remaining order value, or recognized revenue. It shows only separately labelled linked Quote totals, Invoice totals, and recorded payment totals, with coverage counts. This prevents double-counting or treating a quote as booked work.
+
+The traveler reuses an existing opaque QR token; reprints never create a new token. To render the QR image, configure the optional `VMOS_QR_IMAGE_ENDPOINT` script property as the URL prefix of an approved QR renderer whose final parameter is the encoded payload. VMOS sends that renderer only the opaque VMOS scan URL, never customer, job, or financial details. If the property is absent, the traveler prints a clear recovery notice instead of sending any token to a third party. A self-hosted/internal renderer is preferred.

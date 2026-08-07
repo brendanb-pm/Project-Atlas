@@ -16,6 +16,7 @@ Only `appscript/src/Repository/SheetsRepository.gs` calls `SpreadsheetApp`. Serv
 - Returns understandable validation, missing-record, and configuration errors to the minimal Apps Script web UI.
 - Provides a separate QR-addressed shop-floor view for assigned Jobs. Its commands follow `UI -> ShopFloorService -> repository -> Google Sheets`; no browser code accesses Sheets.
 - Records status changes, STOP / PROBLEM reports, block resolutions, workflow assignment, and QR assignment as append-only `JobEvents` records. The only job field changed by a shop-floor command is the existing `Jobs.Status` value.
+- Adds read-only Operations Visibility and printable Traveler routes. Financial fields are explicitly labelled linked quote/invoice/payment values; VMOS does not call them open order value or recognized revenue because the current `Jobs` schema does not contain an authoritative order value.
 
 ## Google Workspace setup
 

@@ -36,6 +36,21 @@ ShopFloorService.prototype.getJob = function (jobId) {
   return this.toShopJob_(job, qr);
 };
 
+/** Builds a print model from an existing QR token; reprints never mint tokens. */
+ShopFloorService.prototype.getTravelerData = function (token) {
+  if (!token) throw new VmosValidationError('Traveler QR token is required.');
+  var record = this.qrTokens.findByToken(token);
+  if (record.revokedAt) throw new VmosNotFoundError('This traveler QR token is no longer active.');
+  var job = this.jobs.get(record.jobId), shopJob = this.toShopJob_(job, record);
+  return serializeVmosValue_({
+    id: shopJob.id, jobId: shopJob.id, customerName: shopJob.customerName,
+    partId: shopJob.partId, revision: shopJob.revision, dueDate: shopJob.dueDate,
+    status: shopJob.status, quantity: shopJob.quantity, machine: shopJob.machine,
+    program: shopJob.program, nextAction: shopJob.nextAction, qrToken: record.id,
+    qrImageUrl: getVmosQrImageUrl_(getShopFloorScanUrl_(record.id))
+  });
+};
+
 ShopFloorService.prototype.toShopJob_ = function (job, qr) {
   var customer = job.customerId ? new MvpService('Customer').get(job.customerId) : {};
   var workflow = getShopWorkflow_(qr.workflowId);
@@ -102,3 +117,19 @@ ShopFloorService.prototype.appendEvent_ = function (job, values) {
   var now = new Date();
   return this.events.append({ id: 'EVT-' + Utilities.getUuid().toUpperCase(), jobId: job.id, eventType: values.eventType, occurredAt: now, actor: getVmosAuditUser_(), previousStatus: values.previousStatus || '', newStatus: values.newStatus || '', notes: values.notes || '', problemType: values.problemType || '', responsibleParty: values.responsibleParty || '', nextAction: values.nextAction || '', expectedResolution: values.expectedResolution || '', machine: values.machine || '', tool: values.tool || '', program: values.program || '', workflowId: values.workflowId || '', workflowVersion: '1', commandId: values.commandId || '' });
 };
+
+/**
+ * A controlled QR renderer is optional. The renderer receives only the opaque
+ * VMOS scan URL, never customer or job data. Leave this property unset to
+ * render the printable recovery message instead of contacting a third party.
+ */
+function getVmosQrImageUrl_(scanUrl) {
+  var endpoint = PropertiesService.getScriptProperties().getProperty('VMOS_QR_IMAGE_ENDPOINT');
+  return endpoint ? endpoint + encodeURIComponent(scanUrl) : '';
+}
+
+function getShopFloorScanUrl_(token) {
+  var url = ScriptApp.getService().getUrl() || PropertiesService.getScriptProperties().getProperty('VMOS_WEB_APP_URL');
+  if (!url) throw new VmosConfigurationError('Deploy the VMOS web app before printing a QR traveler.');
+  return url + (url.indexOf('?') === -1 ? '?' : '&') + 'shop=1&qr=' + encodeURIComponent(token);
+}

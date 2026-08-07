@@ -10,7 +10,8 @@ const tokens = [];
 const context = vm.createContext({
   console, Date, JSON, String, Number, Error, Object, Array, isNaN,
   Utilities: { getUuid: () => '11111111-2222-3333-4444-555555555555' },
-  PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) },
+  PropertiesService: { getScriptProperties: () => ({ getProperty: (name) => name === 'VMOS_QR_IMAGE_ENDPOINT' ? 'https://qr.example.invalid/?data=' : null }) },
+  ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/example/exec' }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }
 });
 ['Utilities/Errors.gs', 'Utilities/Serialization.gs', 'Utilities/WorkflowConfig.gs', 'Services/ShopFloorService.gs'].forEach((file) => vm.runInContext(fs.readFileSync(path.join(base, file), 'utf8'), context));
@@ -48,5 +49,11 @@ assert.equal(events[events.length - 1].problemType, 'TOOL_FAILURE');
 shop.resolveBlock(job.id, { nextStatus: 'INSPECTION', notes: 'Replacement installed.' }, 'cmd-resolve');
 assert.equal(job.status, 'INSPECTION');
 assert.equal(events[events.length - 1].eventType, 'BLOCK_RESOLVED');
+
+const traveler = shop.getTravelerData('opaque-token');
+assert.equal(traveler.jobId, job.id);
+assert.equal(traveler.qrToken, 'opaque-token');
+assert.match(traveler.qrImageUrl, /shop%3D1%26qr%3Dopaque-token/);
+assert.ok(!traveler.qrImageUrl.includes(job.id), 'QR payload must not expose the Job ID.');
 
 console.log('VMOS shop-floor service tests passed');
