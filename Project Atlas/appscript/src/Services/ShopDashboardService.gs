@@ -69,6 +69,8 @@ ShopDashboardService.prototype.buildMetrics_ = function (shopJobs) {
     blockedJobs: active.filter(function (item) { return self.isBlocked_(item); }).length,
     dueTodayJobs: active.filter(function (item) { return isDueOn_(item.job.dueDate, self.now()); }).length,
     dueThisWeekJobs: active.filter(function (item) { return isDueThisWeek_(item.job.dueDate, self.now()); }).length,
+    needsClassificationJobs: active.filter(function (item) { return !self.isKnownStatus_(item); }).length,
+    asOf: self.now(),
     // Financial totals are only calculated for active shop-configured jobs.
     linkedQuotedValue: 0,
     linkedInvoiceTotal: 0,
@@ -98,7 +100,7 @@ ShopDashboardService.prototype.buildMetrics_ = function (shopJobs) {
     result.linkedPaidValue += paid;
     result.jobs.push(serializeVmosValue_({
       id: job.id, customerId: job.customerId, operator: job.operator, status: job.status, dueDate: job.dueDate,
-      workflowId: item.token.workflowId, readyToWork: self.isReady_(item), blocked: self.isBlocked_(item),
+      workflowId: item.token.workflowId, readyToWork: self.isReady_(item), blocked: self.isBlocked_(item), needsClassification: !self.isKnownStatus_(item),
       linkedQuotedValue: orderValue, linkedInvoiceTotal: invoiced, linkedPaidValue: paid,
       lastEventAt: eventsByJob[job.id] || null
     }));
@@ -129,6 +131,9 @@ ShopDashboardService.prototype.isReady_ = function (item) {
   if (this.isBlocked_(item) || this.isComplete_(item)) return false;
   var categories = this.getStatusCategories(item.token.workflowId, item.workflow);
   return (categories.readyStatuses || []).map(normalizeDashboardText_).indexOf(normalizeDashboardText_(item.job.status)) !== -1;
+};
+ShopDashboardService.prototype.isKnownStatus_ = function (item) {
+  return this.isBlocked_(item) || this.isComplete_(item) || this.isReady_(item) || normalizeDashboardText_(item.job.status) === 'RUNNING';
 };
 
 function normalizeDashboardText_(value) { return String(value || '').trim().toUpperCase(); }
