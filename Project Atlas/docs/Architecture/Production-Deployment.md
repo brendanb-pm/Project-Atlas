@@ -31,3 +31,28 @@ From the repository's `Project Atlas/appscript` directory:
 4. Do **not** set `VMOS_SHEET_MAPPING`; the checked-in mapping already matches the supplied headers. If a live header differs, stop rather than changing the workbook.
 5. Authorize using an account with edit access to the workbook, then run `getMvpBootstrap` from the editor. It must return `{ ok: true }` before any write.
 6. Deploy a new version of the Web app and use the new deployment URL. Create one record through each stage and verify generated IDs, default statuses, and audit values.
+
+## Pass 1 shop-floor activation
+
+The live `Customers`, `RFQ's`, `Quotes`, `Jobs`, and `Invoices` sheets remain unchanged. Shop-floor control uses two new, dedicated append-only stores only:
+
+| New worksheet | Exact headers | Purpose |
+|---|---|---|
+| `JobEvents` | `EventID`, `Command ID`, `JobID`, `Event Type`, `Occurred At`, `Actor`, `Previous Status`, `New Status`, `Notes`, `Problem Type`, `Responsible Party`, `Next Action`, `Expected Resolution`, `Machine`, `Tool`, `Program`, `Workflow ID`, `Workflow Version` | Immutable job-history and exception audit trail |
+| `JobQrTokens` | `QR Token`, `JobID`, `Workflow ID`, `Created At`, `Created By`, `Revoked At`, `Revoked By` | Opaque QR-to-job routing tokens; it contains no customer or job details in the QR value |
+
+After `clasp push`, open the Apps Script editor and run `initializeShopOperationalPersistence()` once. It creates only a missing `JobEvents` or `JobQrTokens` sheet and writes the headers above. If either sheet already exists with different headers, it stops without changing anything. It never edits, renames, reorders, or adds columns to any existing production worksheet.
+
+To make a current Job available at the shop floor, run the following from the Apps Script editor, replacing the three values with the Job ID, chosen workflow, and status:
+
+```javascript
+configureShopFloorJob('JOB-26-0127', 'MACHINING', 'SETUP')
+```
+
+The supported workflow IDs are `MACHINING` and `CERAKOTE`. This returns an opaque `qrToken`. Construct and print the QR destination as:
+
+```text
+https://YOUR_WEB_APP_EXEC_URL?shop=1&qr=THE_RETURNED_QR_TOKEN
+```
+
+The shop-floor screen resolves that token server-side, shows the current Job and permitted transitions, and records every command with an idempotency key. `STOP / PROBLEM` changes the existing `Jobs.Status` to `BLOCKED` and appends the reason and context to `JobEvents`; it does not delete or overwrite history. To set different workflows in the future without editing code, set the optional script property `VMOS_WORKFLOW_TEMPLATES` to a JSON object matching `VMOS_DEFAULT_WORKFLOW_TEMPLATES` in `Utilities/WorkflowConfig.gs`.

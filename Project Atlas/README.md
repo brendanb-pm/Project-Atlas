@@ -14,6 +14,8 @@ Only `appscript/src/Repository/SheetsRepository.gs` calls `SpreadsheetApp`. Serv
 - Generates `CUST-YY-####`, `RFQ-YY-####`, `VQT-YY-####`, `JOB-YY-####`, and `INV-YY-####` under a document lock.
 - Carries the customer from RFQ to Quote, Quote to Job, and Job to Invoice when possible, and rejects mismatched relationships.
 - Returns understandable validation, missing-record, and configuration errors to the minimal Apps Script web UI.
+- Provides a separate QR-addressed shop-floor view for assigned Jobs. Its commands follow `UI -> ShopFloorService -> repository -> Google Sheets`; no browser code accesses Sheets.
+- Records status changes, STOP / PROBLEM reports, block resolutions, workflow assignment, and QR assignment as append-only `JobEvents` records. The only job field changed by a shop-floor command is the existing `Jobs.Status` value.
 
 ## Google Workspace setup
 
