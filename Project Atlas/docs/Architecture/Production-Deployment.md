@@ -88,3 +88,13 @@ Review those ready-status values with operations before setting them; they are e
 The current production schema has no authoritative job order-value field. Therefore, the dashboard does **not** calculate or label `Open Order Value`, remaining order value, or recognized revenue. It shows only separately labelled linked Quote totals, Invoice totals, and recorded payment totals, with coverage counts. This prevents double-counting or treating a quote as booked work.
 
 The traveler reuses an existing opaque QR token; reprints never create a new token. To render the QR image, configure the optional `VMOS_QR_IMAGE_ENDPOINT` script property as the URL prefix of an approved QR renderer whose final parameter is the encoded payload. VMOS sends that renderer only the opaque VMOS scan URL, never customer, job, or financial details. If the property is absent, the traveler prints a clear recovery notice instead of sending any token to a third party. A self-hosted/internal renderer is preferred.
+
+## Pass 3 non-AI stores — review before creation
+
+No Pass 3 store is initialized automatically. `IdeasBacklog` and `IdeaEvents` can be created only by manually running `initializeIdeasPersistence()` after header review. Cash receipts, process trials, and purchase approvals remain disabled until their mapping properties point to approved sheets. This protects the existing production schema.
+
+- `ProcessTrials`: `TrialID`, `JobID`, `Machine`, `Material`, `Operation`, `Tool`, `Tool Number`, `Diameter`, `Holder`, `Stickout`, `RPM`, `Feed`, `DOC/Peck`, `Coolant`, `Outcome`, `Tool Life`, `Failure Mode`, `Parameter Classification`, `Notes`, `Observed At`, `Recorded By`, `Created At`.
+- `CashReceipts`: `ReceiptID`, `Receipt Command ID`, `InvoiceID`, `CustomerID`, `Received Date`, `Amount`, `Payment Method`, `Reference Number`, `Deposit Status`, `Deposit Date`, `Deposit Reference`, `Deposit Command ID`, `Notes`, `Created At`, `Created By`, `Updated At`, `Updated By`.
+- Purchase approvals require `VMOS_PURCHASE_APPROVAL_MAPPING` and `VMOS_PURCHASE_APPROVAL_THRESHOLD`; the proposed headers are `Purchase Request ID`, `Request Date`, `Requester`, `Vendor`, `Category`, `Classification`, `Business Justification`, `Expected ROI / Need`, `Description`, `Amount`, `Actual Purchase Amount`, `Status`, `Approval Required`, `Approver`, `Approved At`, `Receipt Reference`, `Notes`, `Created At`, `Updated At`, `Created By`, `Updated By`.
+
+Cash receipt records never overwrite Invoice payment fields. Purchase requests above the threshold reject same-person approval (case-insensitive). Process trials and Ideas events are append-only. Voice transcription/AI extraction remains deferred until a safe API credential is configured.

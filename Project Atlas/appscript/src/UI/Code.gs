@@ -1,4 +1,5 @@
 function doGet(e) {
+  if (e && e.parameter && e.parameter.ideas === '1') return HtmlService.createTemplateFromFile('UI/Ideas').evaluate().setTitle('VMOS Ideas Backlog').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.dashboard === '1') return HtmlService.createTemplateFromFile('UI/OperationsDashboard').evaluate().setTitle('VMOS Operations Dashboard').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.traveler === '1') return HtmlService.createTemplateFromFile('UI/Traveler').evaluate().setTitle('VMOS Job Traveler').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.shop === '1') return HtmlService.createTemplateFromFile('UI/ShopFloor').evaluate().setTitle('VMOS Shop Floor').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -17,3 +18,14 @@ function listJobEvents(jobId) { try { return { ok: true, data: new ShopFloorServ
 function getTravelerPrintData(token) { try { return { ok: true, data: new ShopFloorService().getTravelerData(token) }; } catch (error) { return toClientError_(error); } }
 function getShopDashboard() { try { return { ok: true, data: new ShopDashboardService().getLiveWip() }; } catch (error) { return toClientError_(error); } }
 function getShopOperatorWorkloads() { try { return { ok: true, data: new ShopDashboardService().listOperatorWorkloads() }; } catch (error) { return toClientError_(error); } }
+function listIdeas() { try { return { ok: true, data: new IdeasService().list() }; } catch (error) { return toClientError_(error); } }
+function captureIdea(input) { try { return { ok: true, data: new IdeasService().capture(input) }; } catch (error) { return toClientError_(error); } }
+function requestIdeaPromotion(id, confirmation, note) { try { return { ok: true, data: new IdeasService().requestPromotion(id, confirmation, note) }; } catch (error) { return toClientError_(error); } }
+function recordProcessTrial(input) { try { return { ok: true, data: new ProcessTrialService().record(input) }; } catch (error) { return toClientError_(error); } }
+function listProcessTrials(jobId) { try { return { ok: true, data: new ProcessTrialService().listForJob(jobId) }; } catch (error) { return toClientError_(error); } }
+function recordCashReceipt(input) { try { return { ok: true, data: new CashReceiptService().recordReceipt(input) }; } catch (error) { return toClientError_(error); } }
+function depositCashReceipt(id, input) { try { return { ok: true, data: new CashReceiptService().depositReceipt(id, input) }; } catch (error) { return toClientError_(error); } }
+function getUndepositedPaymentSummary() { try { return { ok: true, data: new CashReceiptService().getUndepositedExceptionSummary(new Date()) }; } catch (error) { return toClientError_(error); } }
+function submitPurchaseRequest(input) { try { return { ok: true, data: new PurchaseApprovalService().submit(input) }; } catch (error) { return toClientError_(error); } }
+function approvePurchaseRequest(id, approver, notes) { try { return { ok: true, data: new PurchaseApprovalService().approve(id, approver, notes) }; } catch (error) { return toClientError_(error); } }
+function recordPurchaseReceipt(id, reference, actor) { try { return { ok: true, data: new PurchaseApprovalService().recordReceipt(id, reference, actor) }; } catch (error) { return toClientError_(error); } }
