@@ -9,3 +9,18 @@ var state={view:'followups',data:null,busy:{},scheduleId:'',reviewId:''};functio
 scheduleForm=function(f){var r=request(f);return '<form class="schedule-form" onsubmit="saveScheduleForReview(event,\''+esc(f.id)+'\','+Number(f.version)+',\''+esc(r&&r.id||'')+'\')"><h3>Schedule FollowUp</h3><div class="grid"><div class="field"><label>Date</label><input name="date" type="date" value="'+esc(localDate(f.startAt)||localDate(f.dueAt))+'" required></div><div class="field"><label>Start time</label><input name="start" type="time" required></div><div class="field"><label>End time</label><input name="end" type="time" required></div><div class="field"><label>Time zone</label><input name="timeZone" value="'+esc(f.timeZone||'America/Los_Angeles')+'" required></div></div><div class="actions"><button class="button primary" type="submit">SAVE SCHEDULE</button><button class="button secondary" type="button" onclick="state.scheduleId=\'\';render()">CANCEL</button></div></form>';};
 function saveScheduleForReview(e,id,version,reviewId){e.preventDefault();var form=e.currentTarget,button=form.querySelector('[type=submit]');if(button.disabled||!form.reportValidity())return;var date=form.date.value,start=form.start.value,end=form.end.value;if(start>=end){note('End time must be after start time.','error');return}button.disabled=true;button.textContent='SAVING…';var schedule={startAt:date+'T'+start+':00Z',endAt:date+'T'+end+':00Z',timeZone:form.timeZone.value},name=reviewId?'resolveCalendarExternalChange':'scheduleFollowUp',args=reviewId?[reviewId,'RESCHEDULE',schedule]:[id,schedule,version];run(name,args,function(){state.scheduleId='';note('Schedule saved. The deadline was not changed.','success');load()});}
 </script>
+<style>
+  /* Scoped keyboard focus treatment for the standalone calendar workspace. */
+  .tab:focus-visible,
+  .button:focus-visible,
+  .field input:focus-visible,
+  .field select:focus-visible {
+    outline: 3px solid #287c9a;
+    outline-offset: 2px;
+  }
+</style>
+<script>
+  /* Announce workspace loading and mutation feedback without relying on color. */
+  document.getElementById('content').setAttribute('aria-live', 'polite');
+  document.getElementById('toast').setAttribute('aria-live', 'polite');
+</script>

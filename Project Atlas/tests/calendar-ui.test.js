@@ -1,5 +1,37 @@
-const assert=require('assert'),fs=require('fs'),path=require('path');const root=path.join(__dirname,'..','appscript','src'),ui=fs.readFileSync(path.join(root,'UI','CalendarFollowUps.html'),'utf8'),code=fs.readFileSync(path.join(root,'UI','Code.gs'),'utf8'),service=fs.readFileSync(path.join(root,'Services','FollowUpCalendarService.gs'),'utf8');
-['MOS account','Connected calendars','Follow-up due:','Not scheduled','SCHEDULE','Calendar event deleted','KEEP FOLLOW-UP','MARK COMPLETE','CANCEL FOLLOW-UP','USE MOS TIME','USE CALENDAR TIME','CHOOSE ANOTHER TIME','Operational schedule','Read-only subscription','button.disabled','@media(max-width:900px)','@media(max-width:600px)'].forEach(text=>assert.ok(ui.includes(text),'calendar UI includes '+text));
-['getCalendarWorkspace','disconnectCalendarConnection','retryCalendarConnection','resolveCalendarExternalChange','reassignFollowUp',"parameter && e.parameter.calendar === '1'"].forEach(text=>assert.ok(code.includes(text),'calendar endpoint/route includes '+text));
-assert.ok(service.includes('FollowUpService.prototype.reassign'),'reassignment preserves FollowUp lifecycle service boundary');assert.ok(!/refreshToken|CredentialReference|ETag|CalDAV URL/.test(ui),'normal calendar UI does not expose provider secrets or technical identifiers');
-assert.ok(ui.includes("reviewId?'resolveCalendarExternalChange':'scheduleFollowUp'"),'manual review reschedule resolves through review boundary');console.log('VMOS calendar UI safety tests passed');
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+
+const root = path.join(__dirname, '..', 'appscript', 'src');
+const ui = fs.readFileSync(path.join(root, 'UI', 'CalendarFollowUps.html'), 'utf8');
+const code = fs.readFileSync(path.join(root, 'UI', 'Code.gs'), 'utf8');
+const service = fs.readFileSync(path.join(root, 'Services', 'FollowUpCalendarService.gs'), 'utf8');
+
+[
+  'MOS account', 'Connected calendars', 'Follow-up due:', 'Not scheduled',
+  'SCHEDULE', 'Calendar event deleted', 'KEEP FOLLOW-UP', 'MARK COMPLETE',
+  'CANCEL FOLLOW-UP', 'USE MOS TIME', 'USE CALENDAR TIME',
+  'CHOOSE ANOTHER TIME', 'Operational schedule', 'Read-only subscription',
+  'button.disabled', '@media(max-width:900px)', '@media(max-width:600px)'
+].forEach((text) => assert.ok(ui.includes(text), `calendar UI includes ${text}`));
+
+[
+  'withSuccessHandler', 'withFailureHandler', 'reportValidity',
+  'End time must be after start time', 'SAVING', "state.scheduleId='';render()",
+  'aria-live', 'focus-visible', 'NOT_CONNECTED', 'ATTENTION_REQUIRED'
+].forEach((text) => assert.ok(ui.includes(text), `calendar UI async/accessibility contract includes ${text}`));
+
+[
+  'getCalendarWorkspace', 'disconnectCalendarConnection',
+  'retryCalendarConnection', 'resolveCalendarExternalChange',
+  'reassignFollowUp', "parameter && e.parameter.calendar === '1'"
+].forEach((text) => assert.ok(code.includes(text), `calendar endpoint/route includes ${text}`));
+
+assert.ok(service.includes('FollowUpService.prototype.reassign'),
+  'reassignment preserves FollowUp lifecycle service boundary');
+assert.ok(!/refreshToken|CredentialReference|ETag|CalDAV URL/.test(ui),
+  'normal calendar UI does not expose provider secrets or technical identifiers');
+assert.ok(ui.includes("reviewId?'resolveCalendarExternalChange':'scheduleFollowUp'"),
+  'manual review reschedule resolves through review boundary');
+
+console.log('VMOS calendar UI safety tests passed');
