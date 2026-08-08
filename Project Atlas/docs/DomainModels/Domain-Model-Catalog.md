@@ -17,4 +17,4 @@ These are proposed durable stores only. This sprint does not create worksheets o
 
 `ExternalBoardProvider`: `requestCreate(payload)`, `requestMove(payload)`, `requestReconcile(payload)`. `WorkflowTransitionRequest`: provider, externalTaskId, externalSectionId, correlationId, actor, occurredAt. `CustomerNotificationProvider`: later sends an already-approved/scheduled communication event and returns only a provider reference/result.
 
-No interface may update a VMOS job directly. Board moves are passed to `ExternalBoardSyncService`, which validates through `FirearmsWorkflowService` before it writes a Job status and appends an event.
+No interface may update a VMOS job directly. Board moves are passed to `ExternalBoardSyncService`, which validates through the Atlas Workflow Engine before it writes a Job status and appends an event. The Firearms Module supplies a Firearms workflow configuration; it is not a dependency of the board adapter.

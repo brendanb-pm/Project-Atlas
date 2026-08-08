@@ -19,11 +19,13 @@ const workOrders = {
 };
 const eventRepo = { append: value => { events.push(value); return value; } };
 const commands = { values: {}, has(id) { return !!this.values[id]; }, get(id) { return this.values[id]; }, put(id, value) { this.values[id] = value; } };
-const workflow = new context.FirearmsWorkflowService({ workOrders, events: eventRepo, commands, clock: () => new Date('2026-08-07T12:00:00Z') });
+const firearmsRecords = { rows: [], create: value => { firearmsRecords.rows.push(value); return value; } };
+const workflow = new context.FirearmsWorkflowService({ workOrders, events: eventRepo, commands, firearmsRecords, clock: () => new Date('2026-08-07T12:00:00Z') });
 
 const intake = { customer: { name: 'Tom' }, item: { itemType: 'Slide' }, requestedWork: { services: ['Optic Cut'] }, authorization: { authorized: true } };
 const created = workflow.createWorkOrder(intake, 'intake-1');
 assert.equal(created.status, 'RECEIVED');
+assert.equal(firearmsRecords.rows[0].jobId, created.id, 'the Firearms extension attaches to the canonical core work order');
 assert.equal(workflow.createWorkOrder(intake, 'intake-1'), created, 'intake command is idempotent');
 assert.throws(() => workflow.createWorkOrder(Object.assign({}, intake, { authorization: { authorized: false } }), 'intake-2'), /authorization/);
 assert.equal(workflow.canTransition('IN_PROCESS', 'FINAL_QC'), true, 'service paths may skip coating');

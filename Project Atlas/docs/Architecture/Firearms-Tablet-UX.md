@@ -1,6 +1,6 @@
 # Firearms Tablet UX
 
-The Firearms workspace is a dedicated, touch-first operating surface for 10–13 inch tablets. It uses charcoal/black, light reading surfaces, high-contrast Vitality red actions, roughly 44px minimum targets, landscape-first responsive layouts, and a stacked portrait layout. Normal ERP navigation is hidden until the user explicitly exits Firearms mode.
+The Firearms workspace is a dedicated, touch-first **Firearms Module** operating surface for 10–13 inch tablets. It uses charcoal/black, light reading surfaces, high-contrast tenant-configured accent actions (Vitality red in VMOS), roughly 44px minimum targets, landscape-first responsive layouts, and a stacked portrait layout. Normal ERP navigation is hidden until the user explicitly exits Firearms mode.
 
 Primary navigation is only **New Intake**, **Active Work**, **Lookup**, and **Scan QR**. Operators never type or review CustomerID, JobID, DocumentID, board task IDs, workflow IDs, paths, or JSON.
 
@@ -19,7 +19,7 @@ The guided sections retain the source form's information architecture without co
 
 ## Camera-first photos
 
-Offer obvious capture tiles for overall, left/right/top/bottom, existing damage, optic, hardware, included parts, and identifying marks where appropriate. The UI sends a capture request to the VMOS document-storage abstraction; it never calls Drive. The returned Document reference is associated with Work Order, Item, inspection/condition, and optic/supplied-part contexts. Originals are retained with no hard deletion.
+Offer obvious capture tiles for overall, left/right/top/bottom, existing damage, optic, hardware, included parts, and identifying marks where appropriate. The UI sends a capture request to the Platform Core document-storage abstraction; it never calls Drive. The returned Document reference is associated through Firearms-module extension records to the canonical Work Order, Item, inspection/condition, and optic/supplied-part contexts. Originals are retained with no hard deletion.
 
 ## Acceptance checklist
 

@@ -38,7 +38,11 @@ FirearmsWorkflowService.prototype.validateIntake = function (intake) {
 FirearmsWorkflowService.prototype.createWorkOrder = function (intake, commandId) {
   if (!commandId) throw new VmosValidationError('Command ID is required.'); this.validateIntake(intake);
   if (this.deps.commands && this.deps.commands.has(commandId)) return this.deps.commands.get(commandId);
-  var job = this.deps.workOrders.create({ customer: intake.customer, intake: intake, status: 'RECEIVED', workflowId: this.workflow.id });
+  // The core Work Order receives only core data. Firearms-only fields are
+  // retained by the module extension record associated with its canonical ID.
+  var job = this.deps.workOrders.create({ customerId: intake.customerId || '', status: 'RECEIVED', workflowId: this.workflow.id });
+  if (!this.deps.firearmsRecords || !this.deps.firearmsRecords.create) throw new VmosConfigurationError('A Firearms module record adapter is required.');
+  this.deps.firearmsRecords.create({ jobId: job.id, customerId: intake.customerId || '', intake: intake, createdAt: this.clock() });
   this.deps.events.append({ jobId: job.id, eventType: 'WORK_ORDER_RECEIVED', newStatus: 'RECEIVED', occurredAt: this.clock(), commandId: commandId });
   if (this.deps.board) this.deps.board.requestCreate({ jobId: job.id, status: 'RECEIVED', intake: intake });
   if (this.deps.commands) this.deps.commands.put(commandId, job);
