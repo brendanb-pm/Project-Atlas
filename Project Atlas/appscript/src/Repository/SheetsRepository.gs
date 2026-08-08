@@ -35,6 +35,18 @@ SheetsRepository.prototype.list = function () {
 SheetsRepository.prototype.findById = function (id) {
   return this.findRowById_(id).record;
 };
+SheetsRepository.prototype.findFirstByFields = function (criteria) {
+  var sheet = this.getSheet_(), mapping = this.headerMap_(), lastRow = sheet.getLastRow(), keys = Object.keys(criteria || {});
+  if (!keys.length || lastRow < 2) return undefined;
+  keys.forEach(function (key) { if (!mapping[key]) throw new VmosConfigurationError('Workbook mapping for ' + this.entityName + '.' + key + ' is missing.'); }, this);
+  var columns = keys.map(function (key) { return mapping[key].column; }), first = Math.min.apply(null, columns), last = Math.max.apply(null, columns);
+  var values = sheet.getRange(2, first, lastRow - 1, last - first + 1).getValues();
+  for (var index = 0; index < values.length; index += 1) {
+    var matches = keys.every(function (key) { return String(values[index][mapping[key].column - first]) === String(criteria[key]); });
+    if (matches) return this.toDomain_(sheet.getRange(index + 2, 1, 1, sheet.getLastColumn()).getValues()[0], mapping);
+  }
+  return undefined;
+};
 SheetsRepository.prototype.findRowById_ = function (id) {
   var sheet = this.getSheet_(), mapping = this.headerMap_(), lastRow = sheet.getLastRow();
   if (!mapping.id) throw new VmosConfigurationError('Primary-key mapping for ' + this.entityName + ' is missing.');

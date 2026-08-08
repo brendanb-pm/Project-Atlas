@@ -123,7 +123,7 @@ write. Do not bulk-convert legacy records or infer schedules/timezones.
 - `FollowUpEvents`: `FollowUpEventID, FollowUpID, Event Type, Occurred At, Actor, Correlation ID, Previous Version, New Version, Details`
 - `CalendarFollowUpLinks`: `CalendarFollowUpLinkID, FollowUpID, ConnectionID, Provider, Calendar ID, External Event ID, External Version, Last Sync Origin, Last Correlation ID, Last Synced FollowUp Version, Created At, Updated At`
 - `ExternalChangeRequests`: `ExternalChangeRequestID, Provider, FollowUpID, Previous ConnectionID, External Event ID, Change Type, Cleanup Operation, Requested Due At, Requested Start At, Requested End At, Requested Time Zone, External Version, Status, Details, Attempt Count, Last Attempt At, Last Error, Detected At, Resolved At, Resolved By, Resolution`
-- `CalendarSyncEvents` (required activation gap): `CalendarSyncEventID, Provider, External Event ID, Correlation ID, Result, Details, Occurred At`
+- `CalendarSyncEvents`: `CalendarSyncEventID, Provider, FollowUpID, ConnectionID, External Event ID, Operation, Change Type, Correlation ID, MOS Version, External Version, Result, Details, Provider Duration Ms, Repository Duration Ms, Total Duration Ms, Recovery Required, Occurred At`
 - `UserCalendarConnections`: `ConnectionID, UserID, Provider, ExternalAccountID, ExternalAccountDisplayName, ExternalCalendarID, ExternalCalendarDisplayName, ConnectionStatus, CapabilitiesJSON, CredentialReference, TokenExpiresAt, SyncCursor, SubscriptionID, SubscriptionExpiresAt, LastSyncAt, LastSuccessfulSyncAt, LastError, CreatedAt, UpdatedAt`
 
 Activation order: regressions with integration disabled; back up/verify the
@@ -131,12 +131,11 @@ non-production workbook; add missing stores/headers additively; verify mappings;
 load non-production fixtures; configure secure references/gateway; validate one
 provider at a time; render/measure; rehearse disable; seek production approval.
 
-Current MAIN injects a `syncEvents` contract for correlation/idempotency, but it
-does not yet provide a concrete `CalendarSyncEvents` repository/mapping in the
-production composition; one UI reconciliation path uses a no-op implementation.
-118A must resolve and test this durable persistence boundary before any real
-two-way provider validation. This is an activation blocker, not permission to
-create a production worksheet in the control story.
+MOS-118A adds the concrete `CalendarSyncEvents` repository/mapping and replaces
+the UI reconciliation no-op. Writable synchronization fails closed when that
+additive mapping/store is absent, while ordinary FollowUps and no-calendar use
+remain compatible. Creating the worksheet remains an explicit non-production
+activation step, not an automatic application behavior.
 
 ## Rollback and disable
 
