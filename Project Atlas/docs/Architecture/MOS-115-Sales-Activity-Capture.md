@@ -24,4 +24,4 @@ Proposed ID convention is `SACT-YY-####`; confirm it before activation. The app 
 
 ## UI and metrics
 
-`?sales=1` is a mobile/tablet activity page with account selection, six quick actions, notes, materials, next action/due date, timeline, and queue summary. It never exposes IDs to operators. Dashboard metrics are intentionally deferred until SalesActivities storage is activated and authoritative: contacted this week, due/overdue, conversions, last-contact average, drop-offs, and no-next-action exceptions. Quote totals are never treated as revenue.
+`?sales=1` is a mobile/tablet activity page with account selection, six quick actions, notes, materials, next action/due date, timeline, and queue summary. It never exposes IDs to operators. The service exposes an authoritative metrics read model for contacted this week, due/overdue, open account follow-ups, conversions, last-contact average, drop-offs, and no-next-action exceptions; dashboard placement awaits SalesActivities activation. Quote totals are never treated as revenue.
