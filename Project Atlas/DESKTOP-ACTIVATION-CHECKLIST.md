@@ -26,6 +26,7 @@ New non-core IDs are UUID-based: `EVT-`, opaque QR UUID, `PTR-`, `RCPT-`, `PUR-`
 4. Dashboard: `VMOS_DASHBOARD_STATUS_CATEGORIES`; set project timezone to shop timezone.
 5. QR: optional `VMOS_QR_IMAGE_ENDPOINT`; prefer internal renderer.
 6. RFQ Intake: `VMOS_RFQ_INTAKE_ENABLED=false` first; mapping/provider/label/folder properties must be reviewed before setting true.
+   Required provider properties: `VMOS_RFQ_GMAIL_LABEL`, `VMOS_RFQ_DRIVE_ROOT_ID`, `VMOS_OPENAI_API_KEY`, optional `VMOS_RFQ_OPENAI_MODEL`.
 7. AI/voice later: `VMOS_OPENAI_API_KEY`, model/provider policy, and explicit access policy.
 
 ## External configuration, still inactive
@@ -33,6 +34,7 @@ New non-core IDs are UUID-based: `EVT-`, opaque QR UUID, `PTR-`, `RCPT-`, `PUR-`
 - Gmail: create a reviewed intake label (recommended `VMOS/RFQ Intake`) only when enabling polling; poll every 10 minutes and retain MessageID/ThreadID dedupe.
 - Drive: retain original attachments under a reviewed staging hierarchy, e.g. `VMOS Staging/RFQ Intake/<IntakeID>`; store SHA-256 checksum; no hard deletion and no auto-created production job folders.
 - Trigger: create one 10-minute time-driven poll trigger only after a manual dry run and disabled-feature test.
+- Provider enablement order: validate disabled behavior; set Gmail label, Drive root, and AI key; run fake/dry-run extraction; review staging only; enable feature flag; then create the 10-minute trigger. Quote PDFs later use a reviewed RFQ/Quote Drive location and fake document/email preparation until approved.
 - Deploy: `clasp push`, authorize, create a new web-app version, then test with a single controlled record.
 
 ## Rollback / disable
