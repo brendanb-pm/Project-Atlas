@@ -1,0 +1,17 @@
+const assert=require('assert'),fs=require('fs'),path=require('path'),vm=require('vm');
+const src=fs.readFileSync(path.join(__dirname,'..','appscript','src','Services','SalesActivityService.gs'),'utf8');
+const c=vm.createContext({Date,String,Number,Object,Array,isNaN,Utilities:{getUuid:()=> 'x'},VmosValidationError:function(m){this.message=m},VmosNotFoundError:function(m){this.message=m}});vm.runInContext(src,c);
+const rows=[],repo={create:r=>{rows.push(r);return r},get:id=>rows.find(r=>r.id===id),update:(id,r)=>{rows[rows.findIndex(x=>x.id===id)]=r;return r},listByCustomerId:id=>rows.filter(r=>r.customerId===id),listOpen:()=>rows.filter(r=>['OPEN','FOLLOW_UP_DUE','OVERDUE'].includes(r.status))};
+const svc=new c.SalesActivityService({repository:repo,accounts:{get:id=>id==='CUST-1'?{id}:null},authorizer:{can:(actor,permission,subject)=>actor==='josh'||(actor==='manager'&&permission==='sales:manage')},clock:()=>new Date('2026-08-08T12:00:00Z'),idGenerator:()=>`SACT-26-${String(rows.length+1).padStart(4,'0')}`});
+const visit={customerId:'CUST-1',activityType:'MATERIAL_DROP_OFF',activityDatetime:'2026-08-08T10:00:00Z',ownerUserId:'josh',summary:'Spoke with counter staff.',outcome:'LEFT_MATERIALS',materialsLeft:true,materialType:'BUSINESS_CARDS',quantityLeft:25,nextAction:'Call and ask for owner',nextActionDueAt:'2026-08-12T09:00:00Z'};
+const first=svc.create(visit,'josh');assert.equal(first.id,'SACT-26-0001');assert.equal(first.quantityLeft,25);assert.equal(first.status,'OPEN');
+assert.throws(()=>svc.create(Object.assign({},visit,{nextAction:'',nextActionDueAt:''}),'josh'),e=>/next action/.test(e.message));
+const closed=svc.create(Object.assign({},visit,{activityType:'PHONE_CALL',outcome:'WON',nextAction:'',nextActionDueAt:'',summary:'Dealer accepted.'}),'josh');assert.equal(closed.status,'CLOSED_WON');
+const overdue=svc.create(Object.assign({},visit,{activityType:'FOLLOW_UP',activityDatetime:'2026-08-01T10:00:00Z',summary:'Earlier note',nextActionDueAt:'2026-08-01T09:00:00Z'}),'josh');assert.equal(overdue.status,'OVERDUE');
+const today=svc.create(Object.assign({},visit,{activityType:'PHONE_CALL',activityDatetime:'2026-08-07T10:00:00Z',summary:'Call attempt',nextActionDueAt:'2026-08-08T15:00:00Z'}),'josh');assert.equal(today.status,'FOLLOW_UP_DUE');
+const queue=svc.followUpQueue(new Date('2026-08-08T12:00:00Z'));assert.equal(queue.overdue[0].id,overdue.id);assert.equal(queue.dueToday[0].id,today.id);assert.equal(queue.upcoming[0].id,first.id);
+const timeline=svc.listTimeline('CUST-1');assert.equal(timeline[0].id,first.id,'timeline is reverse chronological');
+const health=svc.accountFollowUpHealth('CUST-1',new Date('2026-09-08T12:00:00Z'));assert.equal(health.staleness,'SERIOUSLY_STALE');assert.equal(health.lastContactAt,first.activityDatetime);
+assert.throws(()=>svc.create(visit,'brendan'),e=>/permission/.test(e.message));assert.throws(()=>svc.update(first.id,{summary:'Nope'},'brendan'),e=>/owner or a manager/.test(e.message));assert.equal(svc.update(first.id,{notes:'Owner unavailable.'},'manager').notes,'Owner unavailable.');
+assert.throws(()=>svc.create(Object.assign({},visit,{materialType:'LASER'}),'josh'),e=>/material type/.test(e.message));
+console.log('VMOS sales activity tests passed');

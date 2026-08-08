@@ -1,4 +1,5 @@
 function doGet(e) {
+  if (e && e.parameter && e.parameter.sales === '1') return HtmlService.createTemplateFromFile('UI/SalesActivity').evaluate().setTitle('Atlas Sales Activity').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.concept === '1') return HtmlService.createTemplateFromFile('UI/AtlasConcept').evaluate().setTitle('Atlas Product Concepts').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.ideas === '1') return HtmlService.createTemplateFromFile('UI/Ideas').evaluate().setTitle('VMOS Ideas Backlog').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.dashboard === '1') return HtmlService.createTemplateFromFile('UI/OperationsDashboard').evaluate().setTitle('VMOS Operations Dashboard').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

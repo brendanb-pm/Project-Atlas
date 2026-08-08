@@ -18,6 +18,7 @@ assert.ok(!ipm.kanban.columns.includes('COATING'), 'generic IPM workflow does no
 assert.equal(ipm.tenant.terminology.jobs, 'Jobs'); assert.equal(vmos.tenant.terminology.jobs, 'Work Orders');
 assert.ok(vmos.commandCenter.some(card => card.key === 'PURCHASES'));
 assert.ok(!context.getAtlasCommandCenterCards_(context.resolveAtlasDeploymentProfile_({ deploymentKey: 'minimal', identity: { organizationName: 'Test', deploymentName: 'Test' }, modules: ['CRM'] })).some(card => card.key === 'PURCHASES'), 'command cards require their module');
+const salesProfile=context.resolveAtlasDeploymentProfile_({deploymentKey:'sales',identity:{organizationName:'Test',deploymentName:'Test'},modules:['CRM'],featureFlags:{salesActivities:true}});assert.ok(context.getAtlasCommandCenterCards_(salesProfile).some(card=>card.key==='FOLLOW_UP_DUE'),'sales dashboard cards require enabled CRM activity capability');
 const quote = { id: 'VQT-26-0100', customerName: 'Acme', total: 1250, lines: [] };
 const vmosQuote = context.buildAtlasQuotePresentation_(vmos.tenant, quote), ipmQuote = context.buildAtlasQuotePresentation_(ipm.tenant, quote);
 assert.equal(vmosQuote.seller.organizationName, 'Vitality Modification Company'); assert.equal(ipmQuote.seller.organizationName, 'International Precision Machine');
