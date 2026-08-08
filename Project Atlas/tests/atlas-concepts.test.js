@@ -1,0 +1,24 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const source = fs.readFileSync(path.join(__dirname, '..', 'appscript', 'src', 'Utilities', 'AtlasTenantConfig.gs'), 'utf8');
+const context = vm.createContext({ JSON, String, Array, Object, VmosNotFoundError: function (message) { this.message = message; } });
+vm.runInContext(source, context);
+
+const vmos = context.getAtlasConceptBootstrap_('VMOS').data;
+const ipm = context.getAtlasConceptBootstrap_('IPM').data;
+assert.equal(vmos.tenant.deploymentName, 'VMOS');
+assert.equal(ipm.tenant.deploymentName, 'IPM Operations');
+assert.ok(vmos.navigation.includes('Firearms Intake'));
+assert.ok(vmos.navigation.includes('Coating Queue'));
+assert.ok(!ipm.navigation.includes('Firearms Intake'), 'disabled Firearms module is not visible');
+assert.ok(!ipm.navigation.includes('Coating Queue'), 'disabled Coatings module is not visible');
+assert.equal(ipm.tenant.terminologyOverrides.jobs, 'Jobs');
+assert.equal(vmos.tenant.terminologyOverrides.jobs, 'Work Orders');
+assert.ok(vmos.kanban.columns.includes('COATING'));
+assert.ok(!ipm.kanban.columns.includes('COATING'), 'workflow-generated board omits disabled coating state');
+const ipmRendered = JSON.stringify({ tenant: ipm.tenant, navigation: ipm.navigation, kanban: ipm.kanban });
+['Vitality', 'VMOS', 'Firearms', 'Cerakote'].forEach(term => assert.ok(!ipmRendered.includes(term), 'IPM output must not contain ' + term));
+assert.ok(!source.includes('SpreadsheetApp'), 'tenant configuration is storage independent');
+console.log('Atlas product concept tests passed');

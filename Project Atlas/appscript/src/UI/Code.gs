@@ -1,10 +1,12 @@
 function doGet(e) {
+  if (e && e.parameter && e.parameter.concept === '1') return HtmlService.createTemplateFromFile('UI/AtlasConcept').evaluate().setTitle('Atlas Product Concepts').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.ideas === '1') return HtmlService.createTemplateFromFile('UI/Ideas').evaluate().setTitle('VMOS Ideas Backlog').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.dashboard === '1') return HtmlService.createTemplateFromFile('UI/OperationsDashboard').evaluate().setTitle('VMOS Operations Dashboard').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.traveler === '1') return HtmlService.createTemplateFromFile('UI/Traveler').evaluate().setTitle('VMOS Job Traveler').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (e && e.parameter && e.parameter.shop === '1') return HtmlService.createTemplateFromFile('UI/ShopFloor').evaluate().setTitle('VMOS Shop Floor').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   return HtmlService.createTemplateFromFile('UI/Index').evaluate().setTitle('VMOS MVP').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
+function getAtlasConceptBootstrap(tenantKey) { try { return getAtlasConceptBootstrap_(tenantKey); } catch (error) { return toClientError_(error); } }
 function getMvpBootstrap() { try { var data = {}; ['Customer', 'RFQ', 'Quote', 'Job', 'Invoice'].forEach(function (entity) { data[entity] = new MvpService(entity).list(); }); return { ok: true, data: data }; } catch (error) { return toClientError_(error); } }
 function createMvpRecord(entity, input) { try { if (['Customer', 'RFQ', 'Quote', 'Job', 'Invoice'].indexOf(entity) === -1) throw new VmosValidationError('Unsupported entity.'); return { ok: true, data: new MvpService(entity).create(input) }; } catch (error) { return toClientError_(error); } }
 function updateMvpRecord(entity, id, changes) { try { if (['Customer', 'RFQ', 'Quote', 'Job', 'Invoice'].indexOf(entity) === -1) throw new VmosValidationError('Unsupported entity.'); return { ok: true, data: new MvpService(entity).update(id, changes) }; } catch (error) { return toClientError_(error); } }
