@@ -45,8 +45,11 @@ BoundedResult<T> {
 }
 ```
 
-- `limit` is required or receives a repository-defined safe default; adapters
-  enforce a documented maximum.
+- Operator-facing queries default to 50 records. A documented workflow may use
+  up to 100 where that materially improves the task. The default hard cap is
+  200 unless a specific read model documents why it must exceed that cap.
+  History-heavy SalesActivity and JobEvent views use pages, bounded recent
+  history, or Load More rather than unrestricted history.
 - Ordering is deterministic and explicitly named by each query. Every order has
   a unique tie-breaker, normally canonical ID.
 - Cursors are opaque, versioned tokens. Business/UI code must not parse a row
@@ -80,8 +83,9 @@ Timeline order is `activityDatetime DESC, id DESC`. Due order is
 next action/due date, open-without-next-action and staleness inputs in one
 result per authorized account; it must calculate the same MOS-115 business
 rules as today. Sheets can initially scan once and build a request-local map;
-later it may use a verified summary/helper sheet. SQL can use indexed predicates
-and grouped queries. Neither implementation leaks into the contract.
+after material benefit is proven by real Apps Script/Sheets measurements it may
+use a verified summary/helper sheet. SQL can use indexed predicates and grouped
+queries. Neither implementation leaks into the contract.
 
 ### FollowUpRepository
 
@@ -161,9 +165,9 @@ in a generic repository `count(anything)` API.
 | Read model | Minimal output and bounded behavior | Freshness |
 | --- | --- | --- |
 | CRM Account Summary | Customer identity/presentation fields; recent N activities; last contact; next open FollowUp; due/stale/open-without-next-action; independent page link for older history | **REAL-TIME / TRANSACTIONAL** after CRM mutation. Request-local aggregation is safe; persisted cache requires mutation-driven invalidation/rebuild. |
-| CRM Follow-Up Queue | Due Today, Overdue and bounded Upcoming rows containing FollowUp/activity ID, owner, account display, action and due date; each group paged independently | **REAL-TIME / TRANSACTIONAL** for save/complete/reassign; as-of timezone explicit. A short display cache is unsafe unless invalidated on every relevant mutation. |
+| CRM Follow-Up Queue | Due Today, Overdue and bounded Upcoming rows containing FollowUp/activity ID, owner, account display, action and due date; each group paged independently | **REAL-TIME / TRANSACTIONAL** for save/complete/reassign; as-of boundaries use the configured tenant/shop timezone. A short display cache is unsafe unless invalidated on every relevant mutation. |
 | Job Detail | Job; current workflow state; recent N JobEvents with older-history page; bounded Documents and ProcessTrials; only supported related operational fields | Job/status/version **REAL-TIME**; append-only history **NEAR-REAL-TIME** if the UI shows refresh state. |
-| Command Center | Authoritative actionable counts plus small bounded exception lists; no raw full histories | **NEAR-REAL-TIME** for operational counts. Financial and approval facts remain authoritative; cached summaries require as-of timestamp, invalidation and explicit refresh. |
+| Command Center | Authoritative actionable counts plus small bounded exception lists; no raw full histories | **NEAR-REAL-TIME**, initially targeting a 30–60 second refresh/invalidation window. Opening or mutating an authoritative record still uses authoritative state. Financial and approval facts remain authoritative; summaries expose an as-of timestamp and explicit refresh. |
 | Floor Board | Current active work cards and board revision; deltas after cursor; tombstones/removals | **NEAR-REAL-TIME** with bounded polling and visible as-of state. A full snapshot is authoritative recovery. |
 | Calendar Workspace | Actor connections/provider capability display; FollowUps only for requested user/date window; matching links and pending requests; minimal account labels | FollowUp lifecycle/schedule and reconciliation **REAL-TIME** after mutation; provider health **NEAR-REAL-TIME** with last-sync timestamp. |
 | RFQ/Quote Workspace | Bounded RFQ list/search; selected RFQ/quote and required related document/customer presentation; no all-entity bootstrap | Selected record **REAL-TIME**; list/search **NEAR-REAL-TIME** with explicit refresh. |
@@ -200,6 +204,10 @@ getFloorBoardChanges({ afterBoardRevision, limit }) -> {
 - Unknown/expired cursor, retention gap, sequence discontinuity or invalid
   revision returns `fullRefreshRequired: true`. The client replaces state from
   a fresh snapshot.
+- Delta retention is initially 24 hours or 10,000 revisions, whichever limit
+  is reached first. A cursor outside retained history receives a retention-gap
+  result and must take a fresh authoritative snapshot; partial reconstruction
+  is forbidden. Measurements may justify tuning this adapter policy later.
 - Polling remains the first implementation; push/WebSockets are out of scope.
 - The implementation must preserve missed-update recovery and current workflow
   authority. A Sheets option is an append-only operational change sequence plus
@@ -242,7 +250,8 @@ RETURNING`. These are adapter choices; services see the same mutation result.
 - Cursor/as-of metadata is small and provider/storage-neutral.
 - List rows use summary DTOs; full notes, audit history and documents are detail
   calls.
-- Today/date-window endpoints require a bounded business timezone range.
+- Today/date-window endpoints require a bounded range in the configured
+  tenant/shop timezone; Atlas Core never hard-codes a deployment timezone.
 - UI refreshes request deltas or the active page, not an entire bootstrap.
 
 Highest-value endpoint replacements are `getMvpBootstrap`,
@@ -260,9 +269,13 @@ loads, and shop dashboard/floor-board refresh.
 | Changed since | Monotonic domain revision and recovery | Append sequence/current-state sheet; full-refresh fallback | Change table/outbox/sequence |
 | Summary/count | Same business rules and as-of semantics | One-pass aggregation; rebuildable summary sheet if invalidation is proven | Aggregate/materialized view |
 
-Helper sheets, cached indexes and current-state sheets are rebuildable adapter
-artifacts. They require schema/activation/rollback stories, integrity checks,
-and authoritative fallback. They never own domain lifecycle.
+Helper sheets, cached indexes and current-state sheets may be considered only
+after actual Apps Script/Sheets measurements show material benefit. They are
+rebuildable adapter artifacts derived from authoritative records, require
+schema/activation/rollback stories, integrity checks and authoritative fallback,
+and never own domain lifecycle. Atlas domain logic cannot depend on their
+physical existence; corruption or loss cannot destroy canonical records.
+MOS-119 synthetic characterization alone is not sufficient justification.
 
 ## Incremental compatibility and migration order
 
@@ -283,8 +296,11 @@ Recommended implementation sequence:
    incremental Floor Board with full-refresh recovery.
 5. Add FollowUp/link/request/connection bounded queries and split Calendar
    Workspace by view/date window.
-6. Replace generic MVP bootstrap with RFQ/Quote and other view-specific read
-   models; retain compatibility endpoint until all current screens migrate.
+6. Replace generic MVP bootstrap through staged retirement: introduce and
+   validate view-specific read models; migrate consumers incrementally while
+   preserving regressions; identify/instrument remaining consumers; deprecate
+   only after replacements are proven; remove only at zero active usage with
+   regression evidence.
 7. Introduce mutation results and reduce write rescans/per-cell writes behind
    adapter contract tests.
 8. Migrate Command Center to bounded summaries after authoritative definitions
@@ -316,7 +332,7 @@ behavior at SMALL/MEDIUM/HEAVY. Local synthetic improvement is not a production
 PASS: repeat representative paths on isolated Apps Script/Sheets and render the
 affected UI before claiming responsiveness PASS.
 
-## Architectural risks and required decisions
+## Architectural risks and resolved policy decisions
 
 Risks include cursor invalidation under concurrent writes, helper data drifting
 from canonical sheets, stale cached operational state, permission leakage from
@@ -325,20 +341,34 @@ speed gains that move excessive work into activation/rebuild processes. A
 timestamp-only floor cursor can lose same-time changes; row-number cursors bind
 business code to Sheets; neither is acceptable.
 
-Brendan decisions needed before implementation:
+The six previously open Brendan decisions are resolved policy:
 
-1. Approve default/maximum page sizes per UI (proposal: decide from rendered
-   operator testing, not arbitrary infrastructure defaults).
-2. Confirm the deployment business timezone used for Due Today/Overdue window
-   boundaries; do not infer historical timezone.
-3. Confirm how long floor-board deltas must remain replayable before forcing a
-   snapshot.
-4. Confirm acceptable freshness/as-of display for Command Center and provider
-   health summaries.
-5. Decide whether the first Sheets implementation may add rebuildable helper or
-   current-state sheets after direct bounded scans are measured.
-6. Confirm which existing screens may retire `getMvpBootstrap` together versus
-   requiring a staged compatibility period.
+1. **Page size:** operator lists default to 50; workflows may use up to 100 when
+   demonstrably useful; the default hard cap is 200 unless a read model records
+   a justified exception. History-heavy views paginate or use Load More.
+2. **Business timezone:** business-day boundaries use the configured tenant/shop
+   timezone. Atlas Core contains no Vitality/VMOS timezone. Records retain an
+   explicit per-record timezone where scheduling requires it; deployment
+   timezone remains tenant configuration.
+3. **Floor-board retention:** retain deltas for 24 hours or 10,000 revisions,
+   whichever is reached first. A retention gap requires a complete authoritative
+   snapshot and never partial reconstruction. Tune only from measured behavior.
+4. **Command Center freshness:** summaries are near-real-time with an initial
+   30–60 second refresh/invalidation target. Authoritative record workflows stay
+   authoritative; dashboard immediacy does not justify transactional coupling.
+5. **Rebuildable Sheets artifacts:** helper/index/current-state sheets are
+   permitted only after real Apps Script/Sheets evidence shows material benefit.
+   They remain derived, rebuildable, noncanonical and entirely behind the
+   adapter. Domain logic cannot require them, and their loss cannot damage
+   canonical data.
+6. **`getMvpBootstrap` retirement:** staged only—introduce and validate bounded
+   replacements, migrate incrementally with compatibility, instrument remaining
+   consumers, deprecate after proof, and remove only after active usage reaches
+   zero and regression evidence confirms safety.
+
+No Brendan policy decision remains open in MOS-120. Implementation stories may
+surface concrete evidence requiring a new product decision, but none is created
+by this documentation update.
 
 ## Verification and stop condition
 
