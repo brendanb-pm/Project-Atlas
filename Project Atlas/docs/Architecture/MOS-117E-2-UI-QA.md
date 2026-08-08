@@ -11,7 +11,7 @@ provider connection, or production mutation.
 - Responsive breakpoints retain the existing two-column and single-column
   layouts for tablet and mobile sizes.
 - Calendar mutation calls have both success and failure handlers, loading
-  feedback, and duplicate-submit protection.
+  feedback, and duplicate-submit protection on the initial submission.
 - The interface distinguishes the CRM deadline (`Due At`) from a scheduled
   calendar block (`Start At`, `End At`, and time zone).
 - Calendar states, capability-aware actions, deletion actions, conflict
@@ -44,3 +44,45 @@ Exercise these fixture-driven flows with fake/provider-test states:
    actionable rather than producing a blank workspace.
 
 Capture screenshots of each viewport and review flow as release evidence.
+
+## MOS-117E-3 completion-gate findings
+
+Code/functional status is **PARTIAL**. The provider-neutral services and fake
+Google, Microsoft, Apple/iCloud, no-calendar, and iCal paths pass their
+automated regression tests, but the operator UI boundary still has these
+activation blockers:
+
+1. Scheduling through `scheduleFollowUp` updates the MOS FollowUp but does not
+   route a projection request to the owner's provider adapter.
+2. The browser constructs entered wall-clock values with a `Z` suffix. That
+   treats them as UTC even when the selected IANA time zone is not UTC.
+3. A recoverable scheduling failure leaves the submit button disabled. The
+   entered values remain visible, but the operator cannot retry without
+   reopening the form.
+4. Reassignment updates the MOS owner and explains the expected outcome, but
+   it does not yet invoke old/new owner projection reconciliation.
+
+These findings do not affect core CRM use when calendar providers are disabled.
+They must be corrected and retested before writable calendar activation.
+
+## Controlled rendered-QA record
+
+For each cell, record `PASS`, `FAIL`, or `DEFECT` and link the captured image or
+defect record. Do not mark the production calendar UX validated while any cell
+is blank or contains `FAIL`/`DEFECT`.
+
+| Workflow | 1440x900 | 1024x768 | 768x1024 | 390x844 |
+| --- | --- | --- | --- | --- |
+| FollowUps list / Due At-only record |  |  |  |  |
+| Today schedule |  |  |  |  |
+| Calendar Settings |  |  |  |  |
+| Schedule FollowUp |  |  |  |  |
+| External deletion review |  |  |  |  |
+| Conflict review |  |  |  |  |
+| Reassignment |  |  |  |  |
+| Provider failure / recovery |  |  |  |  |
+
+At every cell verify no horizontal scrolling, clipped controls, overlapping
+text, hidden required fields, oversized dialogs, unusable touch controls,
+ambiguous scheduling state, ambiguous account/connection state, technical
+provider data, or unclear destructive-action consequences.
