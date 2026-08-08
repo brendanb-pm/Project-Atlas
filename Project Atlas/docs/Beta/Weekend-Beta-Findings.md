@@ -25,3 +25,5 @@
 ## Main before IPM pilot
 
 Do not deploy the current main UI to an IPM tenant. First extract brand/terminology configuration, relocate Cerakote defaults into the Coatings module, and inject storage repositories into operational services. These are contained but material portability blockers.
+
+See `Atlas-Productization-Foundation.md` and `Beta-to-Main-Promotion-Plan.md` for the implementation-ready follow-up; this document remains the experiment summary.

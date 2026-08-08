@@ -1,0 +1,11 @@
+/** Lightweight registry; Platform Core consumes declarations, not specialty implementations. */
+function getAtlasModuleRegistry_() { return [
+  { key: 'CRM', displayName: 'CRM', requiredCoreCapabilities: ['Company', 'Customer'], optionalIntegrations: [], workflowReferences: [], routes: ['Companies', 'Customers'], navigationEntries: function () { return ['Companies', 'Customers']; } },
+  { key: 'RFQ_QUOTES', displayName: 'RFQ / Quotes', requiredCoreCapabilities: ['RFQ', 'Quote'], optionalIntegrations: ['GMAIL_RFQ_INTAKE', 'AI', 'DRIVE'], workflowReferences: [], routes: ['RFQs', 'Quotes'], navigationEntries: function () { return ['RFQs', 'Quotes']; } },
+  { key: 'MANUFACTURING', displayName: 'Manufacturing', requiredCoreCapabilities: ['Job', 'Part', 'Workflow'], optionalIntegrations: ['ASANA'], workflowReferences: ['defaultWorkflow'], routes: ['Jobs', 'Operations', 'Workload'], navigationEntries: function (profile) { return [profile.terminology.jobs || 'Jobs', 'Operations', 'Workload', 'Parts', 'Machines', 'Programs', 'Fixtures', 'Tools']; } },
+  { key: 'PURCHASING', displayName: 'Purchasing', requiredCoreCapabilities: ['Purchase'], optionalIntegrations: [], workflowReferences: [], routes: ['Purchasing'], navigationEntries: function () { return ['Purchasing']; } },
+  { key: 'INVOICING', displayName: 'Invoicing', requiredCoreCapabilities: ['Invoice', 'Receipt'], optionalIntegrations: [], workflowReferences: [], routes: ['Invoices'], navigationEntries: function () { return ['Invoices']; } },
+  { key: 'PROCESS_LEARNING', displayName: 'Process Learning', requiredCoreCapabilities: ['ProcessTrial'], optionalIntegrations: [], workflowReferences: [], routes: ['Process Trials'], navigationEntries: function () { return ['Documents', 'Process Trials']; } },
+  { key: 'FIREARMS', displayName: 'Firearms', requiredCoreCapabilities: ['Job', 'Document'], optionalIntegrations: ['DRIVE'], workflowReferences: ['VITALITY_FIREARMS'], routes: ['Firearms Intake', 'Firearms Work'], navigationEntries: function () { return ['Firearms Intake', 'Firearms Work']; } },
+  { key: 'COATINGS', displayName: 'Coatings', requiredCoreCapabilities: ['Job', 'Workflow'], optionalIntegrations: [], workflowReferences: ['VITALITY_COATINGS'], routes: ['Coating Work', 'Coating Queue'], navigationEntries: function () { return ['Coating Work', 'Coating Queue']; } }
+]; }
