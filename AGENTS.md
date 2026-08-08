@@ -129,15 +129,41 @@ separately when applicable:
 - `CODE / FUNCTIONAL STATUS: PASS | PARTIAL | FAIL`
 - `UI/UX CODE-LEVEL QA: PASS | PARTIAL | FAIL`
 - `RENDERED VISUAL QA: PASS | PARTIAL | FAIL | NOT PERFORMED`
+- `PERFORMANCE / RESPONSIVENESS QA: PASS | PARTIAL | FAIL | NOT PERFORMED`
 
 Rendered visual QA may pass only after inspecting the actual rendered application
 at the required viewport/device classes. If rendering is unavailable, report it
-honestly.
+honestly. Performance/responsiveness QA may pass only when relevant operator
+workflows have been evaluated with representative data and conditions; unit
+tests passing by themselves are not sufficient evidence.
 
 Normal operator UI should use business language. Avoid exposing architecture or
 provider internals such as adapter, gateway, repository, credential reference,
 ETag, cursor, raw JSON, CalDAV internals, or provider object identifiers unless
 the operator genuinely needs them. Developer diagnostics may remain technical.
+
+## Performance is part of UX
+
+Treat performance defects that materially affect normal operator workflows as
+UX defects as well as technical defects. Evaluate operator-facing work for both
+interaction quality and perceived/system responsiveness. Primary workflows
+should avoid unnecessary network round trips, repository reads or writes,
+repeated full-dataset reads, blocking operations, synchronous external-provider
+dependencies, redundant rendering or initialization, duplicate calculations,
+avoidable polling, and unnecessarily large payloads.
+
+When an operation cannot finish immediately, acknowledge input promptly, show
+visible progress and state, preserve entered data, prevent duplicate submission,
+keep unrelated MOS functionality usable, and provide understandable failure and
+recovery behavior. External integrations must not make ordinary MOS workflows
+wait unnecessarily when their work can safely proceed independently.
+
+Assess performance using realistic end-to-end operator workflows and
+representative data volumes, not only isolated function timings or backend
+benchmarks. Do not optimize prematurely without evidence, but investigate
+demonstrated latency, scaling problems, redundant work, and architectural
+bottlenecks. Never sacrifice correctness, auditability, data integrity, or safe
+failure merely to reduce latency.
 
 ## Time and timezone safety
 
@@ -198,8 +224,9 @@ production-ready unless that actually occurred.
 
 ## Core principle
 
-Optimize for correctness, operator usability, auditability, recoverability,
-modularity, tenant portability, testability, and safe failure. Avoid unnecessary
-refactoring and speculative abstraction. Do not spend compute rewriting working
-code for stylistic consistency. Fix architecture when it creates a demonstrated
-product, safety, portability, maintenance, or reliability problem.
+Optimize for correctness, operator usability and responsiveness, auditability,
+recoverability, modularity, tenant portability, testability, and safe failure.
+Avoid unnecessary refactoring and speculative abstraction. Do not spend compute
+rewriting working code for stylistic consistency. Fix architecture when it
+creates a demonstrated product, safety, portability, performance, maintenance,
+or reliability problem.
