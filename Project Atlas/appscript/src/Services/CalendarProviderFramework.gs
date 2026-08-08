@@ -2,7 +2,7 @@
 var VMOS_CALENDAR_PROVIDER_CAPABILITIES={
   GOOGLE_CALENDAR:{providerKey:'GOOGLE_CALENDAR',canCreate:true,canUpdate:true,canObserveChanges:true,canObserveDeletion:true,supportsTwoWayReschedule:true,supportsPushNotifications:true,supportsDeltaSync:false,supportsPolling:true,supportsVersioning:true,supportsReadOnlyPublication:false},
   MICROSOFT_GRAPH_CALENDAR:{providerKey:'MICROSOFT_GRAPH_CALENDAR',canCreate:true,canUpdate:true,canObserveChanges:true,canObserveDeletion:true,supportsTwoWayReschedule:true,supportsPushNotifications:true,supportsDeltaSync:true,supportsPolling:true,supportsVersioning:true,supportsReadOnlyPublication:false},
-  APPLE_ICLOUD_CALENDAR:{providerKey:'APPLE_ICLOUD_CALENDAR',canCreate:false,canUpdate:false,canObserveChanges:false,canObserveDeletion:false,supportsTwoWayReschedule:false,supportsPushNotifications:false,supportsDeltaSync:false,supportsPolling:true,supportsVersioning:false,supportsReadOnlyPublication:false},
+  APPLE_ICLOUD_CALENDAR:{providerKey:'APPLE_ICLOUD_CALENDAR',canCreate:true,canUpdate:true,canObserveChanges:true,canObserveDeletion:true,supportsTwoWayReschedule:true,supportsPushNotifications:false,supportsDeltaSync:false,supportsPolling:true,supportsVersioning:true,supportsReadOnlyPublication:false},
   ICAL_PUBLICATION:{providerKey:'ICAL_PUBLICATION',canCreate:false,canUpdate:false,canObserveChanges:false,canObserveDeletion:false,supportsTwoWayReschedule:false,supportsPushNotifications:false,supportsDeltaSync:false,supportsPolling:false,supportsVersioning:false,supportsReadOnlyPublication:true}
 };
 function CalendarProviderRegistry(definitions){this.definitions=definitions||VMOS_CALENDAR_PROVIDER_CAPABILITIES;}
