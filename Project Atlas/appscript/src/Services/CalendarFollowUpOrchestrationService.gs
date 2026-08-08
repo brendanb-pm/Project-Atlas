@@ -73,6 +73,7 @@ function CalendarFollowUpOrchestrationService(deps) {
   this.routing = this.deps.routing || new FollowUpCalendarRoutingService(this.connections);
   this.links = this.deps.links;
   this.requests = this.deps.requests;
+  this.events = this.deps.events;
   this.providerServices = this.deps.providerServices || {};
   this.enabled = this.deps.enabled !== false;
   this.wallClock = this.deps.wallClock || new CalendarWallClockService();
@@ -132,7 +133,7 @@ CalendarFollowUpOrchestrationService.prototype.reassign = function (id, ownerUse
   var oldLink = this.links.findByFollowUpId(id);
   var oldConnection = oldLink && oldLink.connectionId ? this.connections.get(oldLink.connectionId) : null;
   var followUp = this.followUps.reassign(id, ownerUserId, expectedVersion, actor, correlationId);
-  var cleanup = this.cleanup_(followUp, oldLink, oldConnection, correlationId + ':old-owner');
+  var cleanup = this.cleanup_(followUp, oldLink, oldConnection, 'REASSIGNMENT', correlationId + ':old-owner');
   this.resetLink_(oldLink);
   var projection = this.project_(followUp, correlationId + ':new-owner');
   return { followUp: followUp, previousOwnerUserId: previousOwnerUserId, cleanup: cleanup, sync: projection };
@@ -147,7 +148,7 @@ CalendarFollowUpOrchestrationService.prototype.disconnect = function (connection
     return link.connectionId === connectionId && !!link.externalEventId;
   }).map(function (link, index) {
     var followUp = self.followUps.repository.get(link.followUpId);
-    var result = self.cleanup_(followUp, link, connection, correlationId + ':' + index);
+    var result = self.cleanup_(followUp, link, connection, 'DISCONNECT', correlationId + ':' + index);
     self.resetLink_(link);
     return result;
   });
@@ -155,11 +156,11 @@ CalendarFollowUpOrchestrationService.prototype.disconnect = function (connection
   return { connection: updated, cleanup: results };
 };
 
-CalendarFollowUpOrchestrationService.prototype.cleanup_ = function (followUp, link, connection, correlationId) {
+CalendarFollowUpOrchestrationService.prototype.cleanup_ = function (followUp, link, connection, operation, correlationId) {
   if (!link || !link.externalEventId) return { result: 'NOT_LINKED' };
   if (!this.enabled) {
     var disabled = { result: 'DISABLED', error: 'Calendar synchronization is disabled.' };
-    this.attention_(followUp, link, disabled, correlationId);
+    this.attention_(followUp, link, disabled, operation, correlationId);
     return disabled;
   }
   var service = connection && this.providerServices[connection.provider];
@@ -171,20 +172,86 @@ CalendarFollowUpOrchestrationService.prototype.cleanup_ = function (followUp, li
   } catch (error) {
     result = { result: 'FAILED', error: error.message };
   }
-  if (result.result !== 'REMOVED') this.attention_(followUp, link, result, correlationId);
+  if (result.result !== 'REMOVED' && result.result !== 'ALREADY_REMOVED') this.attention_(followUp, link, result, operation, correlationId);
   return result;
 };
 
-CalendarFollowUpOrchestrationService.prototype.attention_ = function (followUp, link, result, correlationId) {
+CalendarFollowUpOrchestrationService.prototype.attention_ = function (followUp, link, result, operation, correlationId) {
   if (!this.requests) return;
-  this.requests.create({
+  var request = this.requests.create({
     id: this.id('ECR'), provider: link.provider, followUpId: followUp.id,
-    externalEventId: link.externalEventId, changeType: 'CLEANUP_FAILED',
+    previousConnectionId: link.connectionId, externalEventId: link.externalEventId,
+    changeType: 'CLEANUP_FAILED', cleanupOperation: operation,
     requestedStartAt: followUp.startAt || '', requestedEndAt: followUp.endAt || '',
     requestedTimeZone: followUp.timeZone || '', externalVersion: link.externalVersion || '',
     status: 'PENDING_REVIEW', details: (result && result.error) || 'Old calendar projection requires reconciliation.',
-    detectedAt: this.clock(), resolvedAt: '', resolvedBy: '', resolution: '', correlationId: correlationId
+    attemptCount: 0, lastAttemptAt: '', lastError: (result && result.error) || '',
+    detectedAt: this.clock(), resolvedAt: '', resolvedBy: '', resolution: ''
   });
+  result.requestId = request.id;
+  this.audit_(followUp.id, 'CALENDAR_CLEANUP_FAILED', 'MOS', correlationId, request);
+};
+
+CalendarFollowUpOrchestrationService.prototype.retryCleanup = function (requestId, actor, correlationId) {
+  var request = this.requests.get(requestId);
+  if (!request || request.changeType !== 'CLEANUP_FAILED') throw new VmosValidationError('Cleanup review request not found.');
+  if (request.status === 'RESOLVED') return { result: 'ALREADY_RESOLVED', request: request };
+  if (request.status !== 'PENDING_REVIEW') throw new VmosValidationError('Cleanup review request is not pending.');
+  request.attemptCount = Number(request.attemptCount || 0) + 1;
+  request.lastAttemptAt = this.clock();
+  this.audit_(request.followUpId, 'CALENDAR_CLEANUP_RETRY_ATTEMPTED', actor, correlationId, request);
+  if (!request.previousConnectionId) return this.retryFailed_(request, actor, correlationId, 'The previous calendar connection is unavailable on this legacy cleanup record.');
+  var connection = this.connections.get(request.previousConnectionId);
+  if (!connection) return this.retryFailed_(request, actor, correlationId, 'The previous calendar connection could not be found.');
+  if (connection.provider !== request.provider) return this.retryFailed_(request, actor, correlationId, 'The previous calendar connection does not match the recorded provider.');
+  var service = this.providerServices[request.provider];
+  if (!service || typeof service.removeExternalEvent !== 'function') return this.retryFailed_(request, actor, correlationId, 'Calendar cleanup is not configured for this provider.');
+  var result;
+  try {
+    result = service.removeExternalEvent(connection, request.externalEventId, request.externalVersion, correlationId);
+  } catch (error) {
+    result = { result: 'FAILED', error: error.message };
+  }
+  if (!result || (result.result !== 'REMOVED' && result.result !== 'ALREADY_REMOVED')) {
+    return this.retryFailed_(request, actor, correlationId, result && result.error || 'The previous calendar event could not be removed.');
+  }
+  request.status = 'RESOLVED';
+  request.resolvedAt = this.clock();
+  request.resolvedBy = actor;
+  request.resolution = 'RETRY_CLEANUP';
+  request.lastError = '';
+  this.requests.update(request.id, request);
+  this.audit_(request.followUpId, 'CALENDAR_CLEANUP_RETRY_SUCCEEDED', actor, correlationId, request);
+  return { result: 'RESOLVED', request: request, cleanup: result };
+};
+
+CalendarFollowUpOrchestrationService.prototype.retryFailed_ = function (request, actor, correlationId, message) {
+  request.lastError = message;
+  request.details = message;
+  this.requests.update(request.id, request);
+  this.audit_(request.followUpId, 'CALENDAR_CLEANUP_RETRY_FAILED', actor, correlationId, request);
+  return { result: 'FAILED', error: message, request: request };
+};
+
+CalendarFollowUpOrchestrationService.prototype.acknowledgeCleanup = function (requestId, actor, correlationId) {
+  var request = this.requests.get(requestId);
+  if (!request || request.changeType !== 'CLEANUP_FAILED') throw new VmosValidationError('Cleanup review request not found.');
+  if (request.status === 'RESOLVED') return { result: 'ALREADY_RESOLVED', request: request };
+  if (request.status !== 'PENDING_REVIEW') throw new VmosValidationError('Cleanup review request is not pending.');
+  request.status = 'RESOLVED';
+  request.resolvedAt = this.clock();
+  request.resolvedBy = actor;
+  request.resolution = 'ACKNOWLEDGED';
+  this.requests.update(request.id, request);
+  this.audit_(request.followUpId, 'CALENDAR_CLEANUP_ACKNOWLEDGED', actor, correlationId, request);
+  return { result: 'RESOLVED', request: request };
+};
+
+CalendarFollowUpOrchestrationService.prototype.audit_ = function (followUpId, eventType, actor, correlationId, details) {
+  if (!this.events || typeof this.events.append !== 'function') return;
+  var followUp = this.followUps.repository.get(followUpId);
+  var version = followUp && Number(followUp.version || 0) || 0;
+  this.events.append({id:this.id('FUE'),followUpId:followUpId,eventType:eventType,occurredAt:this.clock(),actor:actor||'MOS',correlationId:correlationId||'',previousVersion:version,newVersion:version,details:JSON.stringify(details||{})});
 };
 
 CalendarFollowUpOrchestrationService.prototype.resetLink_ = function (link) {
@@ -206,7 +273,7 @@ function createCalendarFollowUpOrchestration_() {
   return new CalendarFollowUpOrchestrationService({
     followUps: createFollowUpService_(), connections: connections,
     routing: new FollowUpCalendarRoutingService(connections),
-    links: new CalendarFollowUpLinkRepository(), requests: new ExternalChangeRequestRepository(),
+    links: new CalendarFollowUpLinkRepository(), requests: new ExternalChangeRequestRepository(), events: new FollowUpEventRepository(),
     providerServices: providerServices,
     enabled: getCalendarFollowUpConfig_().enabled
   });

@@ -43,7 +43,11 @@ const linkRepo = {
   create: record => (links.push(record), record),
   update: (id, record) => (links[links.findIndex(value => value.id === id)] = record, record)
 };
-const requestRepo = {create: record => (requests.push(record), record)};
+const requestRepo = {
+  create: record => (requests.push(record), record),
+  get: id => requests.find(record => record.id === id),
+  update: (id, record) => (requests[requests.findIndex(value => value.id === id)] = record, record)
+};
 const clock = () => new Date('2026-08-08T12:00:00Z');
 const followUps = new context.FollowUpService({repository:followRepo,events:{append:event=>(events.push(event),event)},clock,id:prefix=>prefix+'-'+(++sequence)});
 const connectionService = new context.CalendarConnectionService({repository:connectionRepo,clock,id:prefix=>prefix+'-'+(++sequence)});
@@ -71,6 +75,10 @@ function fakeProvider(provider) {
     removeProjection(id, connection, correlationId) {
       calls.push({type:'remove',provider,id,correlationId,connectionId:connection.id});
       return cleanupFailure ? {result:'FAILED',error:'Provider cleanup timeout'} : {result:'REMOVED'};
+    },
+    removeExternalEvent(connection, externalEventId, externalVersion, correlationId) {
+      calls.push({type:'retry-remove',provider,connectionId:connection.id,externalEventId,externalVersion,correlationId});
+      return cleanupFailure ? {result:'FAILED',error:'Provider cleanup timeout'} : {result:'REMOVED'};
     }
   };
 }
@@ -80,7 +88,7 @@ const providers = {
   APPLE_ICLOUD_CALENDAR: fakeProvider('APPLE_ICLOUD_CALENDAR')
 };
 const orchestration = new context.CalendarFollowUpOrchestrationService({
-  followUps, connections:connectionService, links:linkRepo, requests:requestRepo,
+  followUps, connections:connectionService, links:linkRepo, requests:requestRepo, events:{append:event=>(events.push(event),event)},
   providerServices:providers, wallClock, clock, id:prefix=>prefix+'-'+(++sequence)
 });
 
@@ -131,6 +139,32 @@ assert.equal(follow.ownerUserId,'Unconnected','cleanup failure never rolls back 
 assert.equal(result.cleanup.result,'FAILED');
 assert.equal(result.sync.result,'NOT_CONNECTED');
 assert.equal(requests.at(-1).changeType,'CLEANUP_FAILED','failed cleanup creates reviewable attention record');
+const cleanupRequest=requests.at(-1);
+assert.equal(cleanupRequest.previousConnectionId,apple.id,'reassignment failure retains old connection');
+assert.equal(cleanupRequest.provider,'APPLE_ICLOUD_CALENDAR');
+assert.equal(cleanupRequest.externalEventId,'APPLE_ICLOUD_CALENDAR-EVENT');
+assert.equal(cleanupRequest.cleanupOperation,'REASSIGNMENT');
+let retry=orchestration.retryCleanup(cleanupRequest.id,'Manager','retry-1');
+assert.equal(retry.result,'FAILED','failed retry preserves actionable request');
+assert.equal(cleanupRequest.status,'PENDING_REVIEW');
+cleanupFailure=false;
+retry=orchestration.retryCleanup(cleanupRequest.id,'Manager','retry-2');
+assert.equal(retry.result,'RESOLVED');
+assert.equal(calls.at(-1).connectionId,apple.id,'retry routes through previous connection');
+assert.equal(orchestration.retryCleanup(cleanupRequest.id,'Manager','retry-3').result,'ALREADY_RESOLVED','resolved retry is idempotent');
+
+const legacy=requestRepo.create({id:'LEGACY-CLEANUP',followUpId:follow.id,provider:'GOOGLE_CALENDAR',externalEventId:'old',changeType:'CLEANUP_FAILED',status:'PENDING_REVIEW'});
+assert.equal(orchestration.retryCleanup(legacy.id,'Manager','legacy').result,'FAILED','legacy cleanup without connection fails safely');
+const ownerBeforeAck=follow.ownerUserId;
+assert.equal(orchestration.acknowledgeCleanup(legacy.id,'Manager','ack').result,'RESOLVED');
+assert.equal(follow.ownerUserId,ownerBeforeAck,'acknowledge does not alter FollowUp lifecycle or ownership');
+const unavailable=requestRepo.create({id:'UNAVAILABLE-CLEANUP',followUpId:follow.id,previousConnectionId:microsoft.id,provider:'MICROSOFT_GRAPH_CALENDAR',externalEventId:'old-ms',changeType:'CLEANUP_FAILED',status:'PENDING_REVIEW'});
+const microsoftProvider=providers.MICROSOFT_GRAPH_CALENDAR;
+delete providers.MICROSOFT_GRAPH_CALENDAR;
+assert.equal(orchestration.retryCleanup(unavailable.id,'Manager','unavailable').result,'FAILED','unavailable provider remains actionable');
+assert.equal(unavailable.status,'PENDING_REVIEW');
+providers.MICROSOFT_GRAPH_CALENDAR=microsoftProvider;
+['CALENDAR_CLEANUP_FAILED','CALENDAR_CLEANUP_RETRY_ATTEMPTED','CALENDAR_CLEANUP_RETRY_SUCCEEDED','CALENDAR_CLEANUP_RETRY_FAILED','CALENDAR_CLEANUP_ACKNOWLEDGED'].forEach(type=>assert.ok(events.some(event=>event.eventType===type),'audit includes '+type));
 
 const disabledFollow = followUps.create({customerId:'CUST-3',title:'Disabled integration',dueAt:'2026-08-12T09:00:00Z',ownerUserId:'Brendan'},'Brendan');
 const disabled = new context.CalendarFollowUpOrchestrationService({followUps,connections:connectionService,links:linkRepo,requests:requestRepo,providerServices:providers,wallClock,clock,enabled:false,id:prefix=>prefix+'-'+(++sequence)});
@@ -144,9 +178,12 @@ cleanupFailure = false;
 const disconnectFollow = followUps.create({customerId:'CUST-4',title:'Disconnect safely',dueAt:'2026-08-12T09:00:00Z',ownerUserId:'Josh'},'Josh');
 result = orchestration.schedule(disconnectFollow.id,{date:'2026-08-15',startTime:'11:00',endTime:'11:30',timeZone:'America/Los_Angeles'},disconnectFollow.version,'Josh','disconnect-schedule');
 assert.equal(result.sync.result,'PUSHED');
+cleanupFailure=true;
 result = orchestration.disconnect(google.id,'Josh','disconnect-1');
 assert.equal(result.connection.connectionStatus,'DISCONNECTED');
 assert.equal(disconnectFollow.status,'OPEN','disconnect preserves FollowUp lifecycle');
+assert.equal(requests.at(-1).previousConnectionId,google.id,'disconnect failure retains old connection');
+assert.equal(requests.at(-1).cleanupOperation,'DISCONNECT');
 assert.equal(linkRepo.findByFollowUpId(disconnectFollow.id).externalEventId,'','disconnect clears reconciled projection identity');
 
 console.log('VMOS calendar orchestration and timezone regression tests passed');
