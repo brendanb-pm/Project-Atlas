@@ -65,6 +65,49 @@ activation blockers:
 These findings do not affect core CRM use when calendar providers are disabled.
 They must be corrected and retested before writable calendar activation.
 
+## MOS-117E-4 remediation
+
+The E-3 code findings were remediated as follows:
+
+- Scheduling now uses `CalendarFollowUpOrchestrationService`, which commits the
+  MOS schedule, resolves the owner's writable connection, invokes the configured
+  provider service, records the link result, and returns explicit sync status.
+- The browser sends wall-clock date/time values. `CalendarWallClockService`
+  converts them using the selected IANA zone. It rejects nonexistent DST times
+  and requires another unambiguous time when a fall-back time occurs twice.
+- Scheduling failures restore the submit control and retain the draft. An
+  uncertain transport result refreshes authoritative MOS state before retry.
+- Reassignment commits MOS ownership first, reconciles the previous projection,
+  and routes a new projection by the new owner. Cleanup failure creates a
+  reviewable request and never rolls back ownership.
+- Connect, Change Calendar, and Reauthorize actions are visibly disabled and
+  labeled as not configured until a real authorization workflow is activated.
+- Disconnect reconciles linked projections where configured and preserves every
+  MOS FollowUp and its history.
+
+Provider activation must supply `createConfiguredCalendarProviderServices_()`
+returning provider service instances keyed by `GOOGLE_CALENDAR`,
+`MICROSOFT_GRAPH_CALENDAR`, and/or `APPLE_ICLOUD_CALENDAR`. The function must be
+wired to approved secure credential references and gateways. Its absence is a
+supported state: MOS scheduling succeeds and reports `NOT_CONFIGURED`; it never
+pretends an external write occurred.
+
+### State coverage exercised
+
+- Due-only, scheduled, completed, and cancelled FollowUps.
+- Connected, unconnected, disabled, provider-error, and attention-required
+  connection/sync paths.
+- Google, Microsoft, Apple/iCloud, iCal read-only, and no-provider routing.
+- Current-owner and cross-provider reassignment, including cleanup failure and
+  an unconnected new owner.
+- Conflict/deletion review, feature-disabled scheduled data, empty lists, long
+  content wrapping, missing optional display values, duplicate submit blocking,
+  stale-version errors, and uncertain transport refresh behavior.
+
+Rendered visual QA is still required. Static contracts cannot prove layout,
+touch ergonomics, dialog fit, or visual hierarchy in the deployed Apps Script
+runtime.
+
 ## Controlled rendered-QA record
 
 For each cell, record `PASS`, `FAIL`, or `DEFECT` and link the captured image or

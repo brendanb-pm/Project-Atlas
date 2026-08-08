@@ -1,37 +1,23 @@
-const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
+const assert=require('assert'),fs=require('fs'),path=require('path');
+const root=path.join(__dirname,'..','appscript','src');
+const ui=fs.readFileSync(path.join(root,'UI','CalendarFollowUps.html'),'utf8');
+const code=fs.readFileSync(path.join(root,'UI','Code.gs'),'utf8');
+const orchestration=fs.readFileSync(path.join(root,'Services','CalendarFollowUpOrchestrationService.gs'),'utf8');
+const scripts=[...ui.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+assert.equal(scripts.length,1,'calendar workspace has one valid application script block');
+assert.doesNotThrow(()=>new Function(scripts[0][1]),'calendar workspace JavaScript parses');
 
-const root = path.join(__dirname, '..', 'appscript', 'src');
-const ui = fs.readFileSync(path.join(root, 'UI', 'CalendarFollowUps.html'), 'utf8');
-const code = fs.readFileSync(path.join(root, 'UI', 'Code.gs'), 'utf8');
-const service = fs.readFileSync(path.join(root, 'Services', 'FollowUpCalendarService.gs'), 'utf8');
-
-[
-  'MOS account', 'Connected calendars', 'Follow-up due:', 'Not scheduled',
-  'SCHEDULE', 'Calendar event deleted', 'KEEP FOLLOW-UP', 'MARK COMPLETE',
-  'CANCEL FOLLOW-UP', 'USE MOS TIME', 'USE CALENDAR TIME',
-  'CHOOSE ANOTHER TIME', 'Operational schedule', 'Read-only subscription',
-  'button.disabled', '@media(max-width:900px)', '@media(max-width:600px)'
-].forEach((text) => assert.ok(ui.includes(text), `calendar UI includes ${text}`));
-
-[
-  'withSuccessHandler', 'withFailureHandler', 'reportValidity',
-  'End time must be after start time', 'SAVING', "state.scheduleId='';render()",
-  'aria-live', 'focus-visible', 'NOT_CONNECTED', 'ATTENTION_REQUIRED'
-].forEach((text) => assert.ok(ui.includes(text), `calendar UI async/accessibility contract includes ${text}`));
-
-[
-  'getCalendarWorkspace', 'disconnectCalendarConnection',
-  'retryCalendarConnection', 'resolveCalendarExternalChange',
-  'reassignFollowUp', "parameter && e.parameter.calendar === '1'"
-].forEach((text) => assert.ok(code.includes(text), `calendar endpoint/route includes ${text}`));
-
-assert.ok(service.includes('FollowUpService.prototype.reassign'),
-  'reassignment preserves FollowUp lifecycle service boundary');
-assert.ok(!/refreshToken|CredentialReference|ETag|CalDAV URL/.test(ui),
-  'normal calendar UI does not expose provider secrets or technical identifiers');
-assert.ok(ui.includes("reviewId?'resolveCalendarExternalChange':'scheduleFollowUp'"),
-  'manual review reschedule resolves through review boundary');
-
+['MOS account','Connected calendars','Follow-up due:','Not scheduled','SCHEDULE','Calendar event deleted','KEEP FOLLOW-UP','MARK COMPLETE','CANCEL FOLLOW-UP','USE MOS TIME','USE CALENDAR TIME','CHOOSE ANOTHER TIME','Operational schedule','Read-only subscription','@media(max-width:900px)','@media(max-width:600px)'].forEach(text=>assert.ok(ui.includes(text),'calendar UI includes '+text));
+['withSuccessHandler','withFailureHandler','reportValidity','End time must be after start time','SAVING','restoreSubmit','state.draft','aria-live','focus-visible','NOT_CONNECTED','ATTENTION_REQUIRED'].forEach(text=>assert.ok(ui.includes(text),'calendar UI async/accessibility contract includes '+text));
+['getCalendarWorkspace','disconnectCalendarConnection','resolveCalendarExternalChange','reassignFollowUp',"parameter && e.parameter.calendar === '1'",'createCalendarFollowUpOrchestration_().schedule','createCalendarFollowUpOrchestration_().reassign'].forEach(text=>assert.ok(code.includes(text),'calendar endpoint/route includes '+text));
+assert.ok(orchestration.includes('providerServices[route.connection.provider]'),'scheduling routes through owner provider service');
+assert.ok(!ui.includes("+':00Z'"),'wall-clock inputs are not mislabeled as UTC');
+assert.ok(ui.includes('wallDate(f.startAt,f.timeZone)')&&ui.includes('wallTime(f.startAt,f.timeZone)'),'stored instants reopen and display in the assigned IANA time zone');
+assert.ok(!ui.includes("f.timeZone||'America/Los_Angeles'"),'timezone is not silently defaulted without a reviewed preference');
+assert.ok(ui.includes("button.disabled=false;button.textContent='SAVE SCHEDULE'"),'recoverable failure re-enables schedule submission');
+assert.ok(ui.includes('CONNECT NOT CONFIGURED')&&ui.includes('CHANGE NOT CONFIGURED'),'inactive authorization controls are honest and disabled');
+assert.ok(ui.includes('Calendar synchronization is disabled.')&&ui.includes('REASSIGN AFTER REVIEW'),'disabled and pending-review states avoid contradictory actions');
+assert.ok(!/<button[^>]*>CONNECT<\/button>/.test(ui),'placeholder does not masquerade as working OAuth');
+assert.ok(!/refreshToken|CredentialReference|ETag|delta cursor|CalDAV URL|watch ID|subscription ID|Script Properties|raw JSON/.test(ui),'normal UI exposes no provider internals or credentials');
+assert.ok(ui.includes('min-height:44px')&&ui.includes('overflow-wrap:anywhere'),'touch and long-content responsive contracts remain present');
 console.log('VMOS calendar UI safety tests passed');
