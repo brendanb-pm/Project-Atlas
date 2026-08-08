@@ -91,6 +91,14 @@ assert.equal(result.sync.result,'PUSHED','writable owner connection invokes prov
 assert.equal(calls.filter(call => call.type === 'project').length,1);
 assert.equal(follow.startAt.toISOString(),'2026-08-12T22:00:00.000Z');
 assert.equal(follow.dueAt.toISOString(),dueBefore,'scheduling preserves Due At');
+const projectsBeforeKeep = calls.filter(call=>call.type==='project').length;
+result = orchestration.projectExisting(follow.id,'review-use-mos');
+assert.equal(result.sync.result,'PUSHED','Keep FollowUp / Use MOS Time can recreate the authoritative projection');
+assert.equal(calls.filter(call=>call.type==='project').length,projectsBeforeKeep+1);
+const projectsBeforeRecreate = calls.filter(call=>call.type==='project').length;
+result = orchestration.recreateExisting(follow.id,'review-recreate');
+assert.equal(result.sync.result,'PUSHED','deleted external event is recreated from MOS schedule');
+assert.equal(calls.filter(call=>call.type==='project').length,projectsBeforeRecreate+1);
 
 const noCalendar = followUps.create({customerId:'CUST-2',title:'No calendar',dueAt:'2026-08-12T09:00:00Z',ownerUserId:'Other'},'Other');
 result = orchestration.schedule(noCalendar.id,{date:'2026-08-12',startTime:'10:00',endTime:'10:30',timeZone:'America/Los_Angeles'},noCalendar.version,'Other','schedule-2');

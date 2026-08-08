@@ -84,6 +84,8 @@ The E-3 code findings were remediated as follows:
   labeled as not configured until a real authorization workflow is activated.
 - Disconnect reconciles linked projections where configured and preserves every
   MOS FollowUp and its history.
+- Keep FollowUp and Use MOS Time resolve the review and re-project the
+  authoritative MOS schedule when a writable provider is configured.
 
 Provider activation must supply `createConfiguredCalendarProviderServices_()`
 returning provider service instances keyed by `GOOGLE_CALENDAR`,

@@ -86,6 +86,23 @@ CalendarFollowUpOrchestrationService.prototype.schedule = function (id, input, e
   return { followUp: followUp, sync: this.project_(followUp, correlationId) };
 };
 
+CalendarFollowUpOrchestrationService.prototype.projectExisting = function (id, correlationId) {
+  var followUp = this.followUps.repository.get(id);
+  if (!followUp) throw new VmosNotFoundError('Follow-up not found.');
+  return { followUp: followUp, sync: this.project_(followUp, correlationId) };
+};
+
+CalendarFollowUpOrchestrationService.prototype.recreateExisting = function (id, correlationId) {
+  var link = this.links.findByFollowUpId(id);
+  if (link) {
+    link.externalEventId = '';
+    link.externalVersion = '';
+    link.updatedAt = this.clock();
+    this.links.update(link.id, link);
+  }
+  return this.projectExisting(id, correlationId);
+};
+
 CalendarFollowUpOrchestrationService.prototype.project_ = function (followUp, correlationId) {
   if (!this.enabled) return { result: 'DISABLED', followUpId: followUp.id };
   var route = this.routing.destinationFor(followUp);
