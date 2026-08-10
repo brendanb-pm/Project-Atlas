@@ -6,6 +6,8 @@ function VmosConfigurationError(message) { VmosError.call(this, message, 'CONFIG
 VmosConfigurationError.prototype = Object.create(VmosError.prototype);
 function VmosNotFoundError(message) { VmosError.call(this, message, 'NOT_FOUND'); this.name = 'VmosNotFoundError'; }
 VmosNotFoundError.prototype = Object.create(VmosError.prototype);
+function VmosThrottleError(message, retryAfterSeconds) { VmosError.call(this, message, 'THROTTLED'); this.name = 'VmosThrottleError'; this.retryAfterSeconds = retryAfterSeconds || 1; }
+VmosThrottleError.prototype = Object.create(VmosError.prototype);
 
 function clientErrorReference_() {
   try { return 'ERR-' + Utilities.getUuid().replace(/-/g, '').slice(0, 12).toUpperCase(); }
@@ -35,10 +37,13 @@ function safeClientError_(error, referenceId) {
     CONFLICT: 'This record changed elsewhere. Refresh and review it before trying again.',
     CONFIGURATION_ERROR: 'This feature is not configured.',
     CONFIGURATION_UNAVAILABLE: 'This feature is not configured.',
-    PROVIDER_UNAVAILABLE: 'The connected service is temporarily unavailable.'
+    PROVIDER_UNAVAILABLE: 'The connected service is temporarily unavailable.',
+    THROTTLED: error && error.message || 'Too many requests. Wait briefly, then try again.'
   };
   var publicCode = code === 'CONFIGURATION_ERROR' ? 'CONFIGURATION_UNAVAILABLE' : (messages[code] ? code : 'INTERNAL_ERROR');
-  return { code: publicCode, message: messages[code] || 'Your request could not be completed.', referenceId: referenceId };
+  var response = { code: publicCode, message: messages[code] || 'Your request could not be completed.', referenceId: referenceId };
+  if (code === 'THROTTLED') response.retryAfterSeconds = Math.max(1, Number(error.retryAfterSeconds || 1));
+  return response;
 }
 function toClientError_(error) {
   var referenceId = clientErrorReference_();
