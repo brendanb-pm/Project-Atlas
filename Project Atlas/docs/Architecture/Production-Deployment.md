@@ -27,7 +27,7 @@ From the repository's `Project Atlas/appscript` directory:
 
 1. Copy `.clasp.json.example` to `.clasp.json` and replace only `REPLACE_WITH_YOUR_EXISTING_APPS_SCRIPT_ID` with the ID of the existing production Apps Script project. `.clasp.json` is ignored by Git and must never be committed.
 2. Run `clasp push`. Confirm the Apps Script editor shows ordinary source files, including `Code.gs`, rather than repository paths. The project must expose `doGet`, `getMvpBootstrap`, and `createMvpRecord`.
-3. In Project Settings -> Script properties, add `VMOS_SPREADSHEET_ID` with value `1pWL1_FZmrCTJI6yCHqtNUIPBjQ0zG_2GqiYUOZTCAco`.
+3. In Project Settings -> Script properties, add `VMOS_SPREADSHEET_ID` with value `REPLACE_WITH_PRODUCTION_SPREADSHEET_ID`. The real environment-specific identifier belongs only in the deployed Apps Script project's Script Properties (or another approved secure deployment configuration), never in committed repository content.
 4. Do **not** set `VMOS_SHEET_MAPPING`; the checked-in mapping already matches the supplied headers. If a live header differs, stop rather than changing the workbook.
 5. Authorize using an account with edit access to the workbook, then run `getMvpBootstrap` from the editor. It must return `{ ok: true }` before any write.
 6. Deploy a new version of the Web app and use the new deployment URL. Create one record through each stage and verify generated IDs, default statuses, and audit values.
