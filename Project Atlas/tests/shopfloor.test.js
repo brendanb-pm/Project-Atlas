@@ -5,6 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..', 'appscript', 'src');
 const server = fs.readFileSync(path.join(root, 'UI', 'Code.gs'), 'utf8');
 const shop = fs.readFileSync(path.join(root, 'UI', 'ShopFloor.html'), 'utf8');
+const traveler = fs.readFileSync(path.join(root, 'UI', 'Traveler.html'), 'utf8');
 
 // The administration screen is still the default; shop mode is an explicit
 // route so the existing MVP remains available.
@@ -35,6 +36,12 @@ assert.ok((shop.match(/withSuccessHandler/g) || []).length >= 6, 'Every shop-flo
 assert.ok((shop.match(/withFailureHandler/g) || []).length >= 6, 'Every shop-floor call needs a failure handler.');
 assert.match(shop, /isPending\s*\(/, 'Shop-floor actions need a duplicate-submission guard.');
 assert.match(shop, /setBusy\s*\(/, 'Shop-floor actions need visible saving state.');
+assert.match(shop, /transitionShopFloorJob\([^\n]+shopState\.token\)/, 'Transitions must present the resolved QR token.');
+assert.match(shop, /reportJobProblem\([^\n]+shopState\.token\)/, 'Problem reports must present the resolved QR token.');
+assert.match(shop, /resolveJobBlock\([^\n]+shopState\.token\)/, 'Block resolution must present the resolved QR token.');
+assert.match(shop, /meta name="referrer" content="no-referrer"/, 'QR routes must not leak tokens through referrers.');
+assert.match(traveler, /meta name="referrer" content="no-referrer"/, 'Traveler routes must not leak tokens through referrers.');
+assert.doesNotMatch(traveler, /model\.qrToken/, 'Traveler UI must not display raw QR tokens.');
 
 // Critical Pass 1 controls and the audit timeline must remain discoverable in
 // the touch UI.  This intentionally checks labels, not implementation details.

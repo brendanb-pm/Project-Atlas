@@ -31,9 +31,9 @@ function updateMvpRecord(entity, id, changes) { try { if (['Customer', 'RFQ', 'Q
 function configureShopFloorJob(jobId, workflowId, initialStatus) { try { return { ok: true, data: new ShopFloorService().configureJob(jobId, workflowId, initialStatus) }; } catch (error) { return toClientError_(error); } }
 function resolveShopJobByQr(token) { try { return { ok: true, data: new ShopFloorService().resolveByQr(token) }; } catch (error) { return toClientError_(error); } }
 function getShopFloorJob(jobId) { try { return { ok: true, data: new ShopFloorService().getJob(jobId) }; } catch (error) { return toClientError_(error); } }
-function transitionShopFloorJob(jobId, targetStatus, commandId, notes) { try { return { ok: true, data: new ShopFloorService().transition(jobId, targetStatus, commandId, notes) }; } catch (error) { return toClientError_(error); } }
-function reportJobProblem(jobId, payload, commandId) { try { return { ok: true, data: new ShopFloorService().reportProblem(jobId, payload, commandId) }; } catch (error) { return toClientError_(error); } }
-function resolveJobBlock(jobId, payload, commandId) { try { return { ok: true, data: new ShopFloorService().resolveBlock(jobId, payload, commandId) }; } catch (error) { return toClientError_(error); } }
+function transitionShopFloorJob(jobId, targetStatus, commandId, notes, qrToken) { try { return { ok: true, data: new ShopFloorService().transition(jobId, targetStatus, commandId, notes, qrToken) }; } catch (error) { return toClientError_(error); } }
+function reportJobProblem(jobId, payload, commandId, qrToken) { try { return { ok: true, data: new ShopFloorService().reportProblem(jobId, payload, commandId, qrToken) }; } catch (error) { return toClientError_(error); } }
+function resolveJobBlock(jobId, payload, commandId, qrToken) { try { return { ok: true, data: new ShopFloorService().resolveBlock(jobId, payload, commandId, qrToken) }; } catch (error) { return toClientError_(error); } }
 function listJobEvents(jobId) { try { return { ok: true, data: new ShopFloorService().listEvents(jobId) }; } catch (error) { return toClientError_(error); } }
 function getTravelerPrintData(token) { try { return { ok: true, data: new ShopFloorService().getTravelerData(token) }; } catch (error) { return toClientError_(error); } }
 function getShopDashboard() { try { return { ok: true, data: new ShopDashboardService().getLiveWip() }; } catch (error) { return toClientError_(error); } }

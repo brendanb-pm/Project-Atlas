@@ -74,5 +74,10 @@ const tokens = new context.JobQrTokenRepository();
 tokens.create({ id: context.generateOpaqueJobQrToken_(), jobId: 'JOB-26-0127', workflowId: 'MACHINING', createdAt: new Date('2026-08-07T01:14:00.000Z'), createdBy: 'Josh' });
 assert.equal(tokens.findActiveByJobId('JOB-26-0127').length, 1);
 assert.match(tokens.findActiveByJobId('JOB-26-0127')[0].id, /^[a-f0-9]{32}$/);
+const tokenId = tokens.findActiveByJobId('JOB-26-0127')[0].id;
+tokens.revoke(tokenId, 'Authoritative User');
+assert.equal(tokens.findActiveByJobId('JOB-26-0127').length, 0);
+assert.equal(tokens.findByToken(tokenId).revokedBy, 'Authoritative User');
+assert.ok(tokens.findByToken(tokenId).revokedAt, 'Revocation history must remain durable.');
 
 console.log('VMOS operational persistence tests passed');

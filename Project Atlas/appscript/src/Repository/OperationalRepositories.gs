@@ -27,6 +27,9 @@ JobQrTokenRepository.prototype.create = function (record) {
   if (!record.jobId) throw new VmosValidationError('Job ID is required for a QR token.');
   return this.repository.insert(record);
 };
+JobQrTokenRepository.prototype.revoke = function (token, actor) {
+  return this.repository.updateById(token, { revokedAt: new Date(), revokedBy: actor });
+};
 JobQrTokenRepository.prototype.findActiveByJobId = function (jobId) {
   return this.list().filter(function (record) {
     return String(record.jobId) === String(jobId) && !record.revokedAt;
@@ -35,5 +38,6 @@ JobQrTokenRepository.prototype.findActiveByJobId = function (jobId) {
 
 /** A token contains no job/customer information and is safe to place in a QR URL. */
 function generateOpaqueJobQrToken_() {
-  return Utilities.getUuid().replace(/-/g, '');
+  return Utilities.getUuid().replace(/-/g, '').toLowerCase();
 }
+function isValidOpaqueJobQrToken_(token) { return /^[a-f0-9]{32}$/.test(String(token || '')); }
