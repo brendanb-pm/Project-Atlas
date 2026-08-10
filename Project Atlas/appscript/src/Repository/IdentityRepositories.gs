@@ -16,3 +16,5 @@ TenantMembershipRepository.prototype.findActive = function (tenantId, userId) { 
 function ExternalIdentityReferenceRepository() { AtlasIdentityRepository.call(this, 'ExternalIdentityReference', ATLAS_IDENTITY_MAPPINGS.ExternalIdentityReference); }
 ExternalIdentityReferenceRepository.prototype = Object.create(AtlasIdentityRepository.prototype);
 ExternalIdentityReferenceRepository.prototype.findActive = function (provider, subject) { var matches=this.list().filter(function(record){return String(record.provider)===String(provider)&&String(record.subject).toLowerCase()===String(subject).toLowerCase()&&String(record.status).toUpperCase()==='ACTIVE';});if(matches.length>1)throw new VmosAuthorizationError('External identity mapping is ambiguous.');return matches[0]; };
+function SecurityAuditEventRepository() { AtlasIdentityRepository.call(this,'SecurityAuditEvent',ATLAS_IDENTITY_MAPPINGS.SecurityAuditEvent); }
+SecurityAuditEventRepository.prototype=Object.create(AtlasIdentityRepository.prototype);

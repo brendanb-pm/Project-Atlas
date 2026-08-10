@@ -29,8 +29,10 @@ function AtlasAuthorizationService(dependencies) {
   this.users=dependencies.users||new AtlasUserRepository(); this.memberships=dependencies.memberships||new TenantMembershipRepository();
   this.identities=dependencies.identities||new ExternalIdentityReferenceRepository(); this.clock=dependencies.clock||function(){return new Date();};
   this.uuid=dependencies.uuid||function(){return Utilities.getUuid();}; this.entitlements=dependencies.entitlements||{assertAllowed:function(){return true;}};
+  this.securityAudit=dependencies.securityAudit||null;this.securityAuditRepository=dependencies.securityAuditRepository;
 }
-AtlasAuthorizationService.prototype.execute = function (requiredCapability, operationName, operation) {
+AtlasAuthorizationService.prototype.execute = function (requiredCapability, operationName, operation, options) {
+  options=options||{};
   if (typeof operation!=='function') throw new VmosAuthorizationError('Authorized operation is unavailable.');
   if (this.config.mode==='DISABLED_FOR_DEVELOPMENT') return operation(this.legacyContext_(operationName));
   var context;
@@ -39,7 +41,8 @@ AtlasAuthorizationService.prototype.execute = function (requiredCapability, oper
     if (this.config.mode==='VALIDATION') { this.logValidation_(error,operationName); return operation(this.legacyContext_(operationName,'VALIDATION_UNENFORCED')); }
     throw error;
   }
-  return operation(context);
+  if(!options.auditRequired)return operation(context);
+  return (this.securityAudit||new SecurityAuditService({repository:this.securityAuditRepository})).execute(context,requiredCapability,operation);
 };
 AtlasAuthorizationService.prototype.authorize_ = function (requiredCapability, operationName) {
   try { return this.authorizeResolved_(requiredCapability,operationName); }
@@ -58,7 +61,7 @@ AtlasAuthorizationService.prototype.authorizeResolved_ = function (requiredCapab
   this.entitlements.assertAllowed({tenantId:this.config.tenantId,userId:user.id,operation:operationName});
   var capabilities=this.capabilitiesFor_(membership);
   if (requiredCapability&&capabilities.indexOf(requiredCapability)===-1) throw new VmosAuthorizationError('Required capability is unavailable.');
-  return this.context_({userId:user.id,tenantId:this.config.tenantId,principal:principal,operationName:operationName,authoritative:true,kind:'USER'});
+  return this.context_({userId:user.id,tenantId:this.config.tenantId,principal:principal,operationName:operationName,authoritative:true,kind:'USER',capabilities:capabilities});
 };
 AtlasAuthorizationService.prototype.capabilitiesFor_ = function (membership) {
   var values=[], roles=parseIdentityList_(membership.roles), explicit=parseIdentityList_(membership.capabilities);
@@ -67,7 +70,7 @@ AtlasAuthorizationService.prototype.capabilitiesFor_ = function (membership) {
 };
 AtlasAuthorizationService.prototype.context_ = function (values) {
   return Object.freeze({userId:values.userId,tenantId:values.tenantId,principalType:values.principal.type,principalSubject:values.principal.subject,
-    operation:values.operationName,correlationId:'AUTH-'+this.uuid(),occurredAt:this.clock(),actorType:values.kind,authoritative:values.authoritative===true});
+    operation:values.operationName,correlationId:'AUTH-'+this.uuid(),occurredAt:this.clock(),actorType:values.kind,authoritative:values.authoritative===true,capabilities:Object.freeze((values.capabilities||Object.keys(ATLAS_CAPABILITIES)).slice())});
 };
 AtlasAuthorizationService.prototype.legacyContext_ = function (operationName,kind) {
   var actor=getVmosAuditUser_(); return this.context_({userId:actor,tenantId:this.config.tenantId||'DEVELOPMENT_UNSCOPED',principal:{type:'LEGACY_DEVELOPMENT',subject:actor},operationName:operationName,authoritative:false,kind:kind||'DEVELOPMENT_UNENFORCED'});
@@ -77,7 +80,22 @@ AtlasAuthorizationService.prototype.logValidation_ = function (error,operationNa
 function parseIdentityList_(value) { if(Array.isArray(value))return value.map(function(v){return String(v).trim().toUpperCase();}).filter(Boolean);if(!value)return [];try{var parsed=JSON.parse(value);if(Array.isArray(parsed))return parseIdentityList_(parsed);}catch(ignored){}return String(value).split(',').map(function(v){return v.trim().toUpperCase();}).filter(Boolean); }
 
 function getAtlasAuthorizationService_() { return new AtlasAuthorizationService(); }
-function authorizedExecute_(requiredCapability,operationName,operation) { return getAtlasAuthorizationService_().execute(requiredCapability,operationName,operation); }
+function authorizedExecute_(requiredCapability,operationName,operation,options) { return getAtlasAuthorizationService_().execute(requiredCapability,operationName,operation,options); }
+
+function SecurityAuditService(dependencies){dependencies=dependencies||{};this.repository=dependencies.repository||new SecurityAuditEventRepository();this.clock=dependencies.clock||function(){return new Date();};this.uuid=dependencies.uuid||function(){return Utilities.getUuid();};}
+SecurityAuditService.prototype.execute=function(context,requiredCapability,operation){
+  var record={id:'SAE-'+this.uuid(),tenantId:context.tenantId,userId:context.userId,principalType:context.principalType,principalSubject:context.principalSubject,operation:context.operation,requiredCapability:requiredCapability||'',capabilitiesJson:JSON.stringify(context.capabilities||[]),correlationId:context.correlationId,actorType:context.actorType,occurredAt:context.occurredAt,completedAt:'',outcome:'',status:'PENDING',details:''};
+  this.repository.create(record);
+  try{
+    var value=operation(context);
+    try{this.repository.update(record.id,{completedAt:this.clock(),outcome:'SUCCEEDED',status:'COMPLETED'});return {__atlasAuthorizedResult:true,value:value,auditStatus:'COMPLETED',auditEventId:record.id};}
+    catch(auditError){return {__atlasAuthorizedResult:true,value:value,auditStatus:'RECOVERY_REQUIRED',auditEventId:record.id};}
+  }catch(error){
+    try{this.repository.update(record.id,{completedAt:this.clock(),outcome:error&&error.code||'UNKNOWN_OUTCOME',status:(error&&['VALIDATION_ERROR','AUTHORIZATION_ERROR','NOT_FOUND','CONFLICT'].indexOf(error.code)!==-1)?'FAILED':'RECOVERY_REQUIRED',details:String(error&&error.code||'INTERNAL_ERROR')});}catch(ignored){}
+    if(!error||['VALIDATION_ERROR','AUTHORIZATION_ERROR','NOT_FOUND','CONFLICT'].indexOf(error.code)===-1){var uncertain=new VmosError('The result could not be confirmed. Refresh before retrying.','UNKNOWN_OUTCOME');uncertain.cause=error;throw uncertain;}
+    throw error;
+  }
+};
 
 var ATLAS_SYSTEM_OPERATION_CAPABILITIES = { CALENDAR_RECONCILIATION:['CALENDAR_RECONCILE'], RFQ_INTAKE:['RFQ_WRITE'] };
 function createTrustedSystemAuditContext_(operationName,requiredCapability) {
@@ -86,4 +104,8 @@ function createTrustedSystemAuditContext_(operationName,requiredCapability) {
   var config=getAtlasIdentityConfig_(); if(!config.tenantId)throw new VmosAuthorizationError('Tenant context could not be resolved.');
   return Object.freeze({userId:'SYSTEM:'+operationName,tenantId:config.tenantId,principalType:'ATLAS_SYSTEM',principalSubject:operationName,operation:operationName,
     correlationId:'SYS-'+Utilities.getUuid(),occurredAt:new Date(),actorType:'SYSTEM',authoritative:true});
+}
+function trustedSystemExecute_(operationName,requiredCapability,operation,dependencies){
+  dependencies=dependencies||{};var context=createTrustedSystemAuditContext_(operationName,requiredCapability),audit=dependencies.securityAudit||new SecurityAuditService();
+  return audit.execute(context,requiredCapability,operation);
 }

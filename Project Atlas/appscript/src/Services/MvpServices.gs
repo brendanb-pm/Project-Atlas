@@ -46,6 +46,8 @@ function RFQService() { return new MvpService('RFQ'); }
 function QuoteService() { return new MvpService('Quote'); }
 function JobService() { return new MvpService('Job'); }
 function InvoiceService() { return new MvpService('Invoice'); }
+function MvpLifecycleService(entityName,actor){this.service=new MvpService(entityName,{auditUser:function(){return actor;}});}
+MvpLifecycleService.prototype.transition=function(id,fromStatus,toStatus){var record=this.service.get(id);if(record.status!==fromStatus)throw new VmosConflictError('Record status changed. Refresh and try again.');return this.service.update(id,{status:toStatus});};
 
 function getVmosAuditUser_() {
   return Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || 'VMOS';

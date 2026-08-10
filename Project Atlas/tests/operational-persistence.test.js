@@ -42,7 +42,8 @@ const context = vm.createContext({
   console, Date, JSON, String, Number, Error, Object, Array,
   Utilities: { getUuid: () => 'a1b2c3d4-e5f6-47a8-9012-3456789abcde' },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) },
-  SpreadsheetApp: { openById: () => spreadsheet }
+  SpreadsheetApp: { openById: () => spreadsheet },
+  callable_: (name, policy, operation) => operation({ userId: 'ADMIN-TEST' })
 });
 
 [

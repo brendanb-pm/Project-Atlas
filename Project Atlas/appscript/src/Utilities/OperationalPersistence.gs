@@ -5,6 +5,9 @@
  * only after approving the headers in ConfigOperational.gs.
  */
 function initializeShopOperationalPersistence() {
+  return callable_('initializeShopOperationalPersistence','ADMINISTRATIVE',function(){return initializeShopOperationalPersistence_();});
+}
+function initializeShopOperationalPersistence_() {
   var config = getShopOperationalConfig_();
   var spreadsheet = SpreadsheetApp.openById(config.spreadsheetId);
   return {

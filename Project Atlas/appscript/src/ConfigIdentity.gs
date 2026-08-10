@@ -11,6 +11,10 @@ var ATLAS_IDENTITY_MAPPINGS = {
   ExternalIdentityReference: {
     sheetName: 'ExternalIdentityReferences', idField: 'IdentityReferenceID',
     fields: { id: ['IdentityReferenceID'], userId: ['UserID'], provider: ['Provider'], subject: ['Subject'], status: ['Status'], createdAt: ['Created At'], updatedAt: ['Updated At'] }
+  },
+  SecurityAuditEvent: {
+    sheetName:'SecurityAuditEvents', idField:'SecurityAuditEventID',
+    fields:{id:['SecurityAuditEventID'],tenantId:['TenantID'],userId:['UserID'],principalType:['Principal Type'],principalSubject:['Principal Reference'],operation:['Operation'],requiredCapability:['Required Capability'],capabilitiesJson:['Capabilities JSON'],correlationId:['Correlation ID'],actorType:['Actor Type'],occurredAt:['Occurred At'],completedAt:['Completed At'],outcome:['Outcome'],status:['Status'],details:['Details']}
   }
 };
 

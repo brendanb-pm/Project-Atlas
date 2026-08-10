@@ -38,7 +38,8 @@ function safeClientError_(error, referenceId) {
     CONFIGURATION_ERROR: 'This feature is not configured.',
     CONFIGURATION_UNAVAILABLE: 'This feature is not configured.',
     PROVIDER_UNAVAILABLE: 'The connected service is temporarily unavailable.',
-    THROTTLED: error && error.message || 'Too many requests. Wait briefly, then try again.'
+    THROTTLED: error && error.message || 'Too many requests. Wait briefly, then try again.',
+    UNKNOWN_OUTCOME: 'The result could not be confirmed. Refresh the record before trying again.'
   };
   var publicCode = code === 'CONFIGURATION_ERROR' ? 'CONFIGURATION_UNAVAILABLE' : (messages[code] ? code : 'INTERNAL_ERROR');
   var response = { code: publicCode, message: messages[code] || 'Your request could not be completed.', referenceId: referenceId };

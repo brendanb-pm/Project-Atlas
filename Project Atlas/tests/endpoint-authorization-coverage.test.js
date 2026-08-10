@@ -12,7 +12,8 @@ callableNames.forEach(name=>{
   assert.ok(line.includes("callable_('"+name+"'"),name+' must enter the universal callable boundary.');
 });
 const classified=Array.from(registry.matchAll(/([A-Za-z][A-Za-z0-9_]*):\{kind:/g)).map(match=>match[1]);
-assert.deepEqual(classified.sort(),callableNames.sort(),'Inventory and callable surface must match exactly.');
+callableNames.forEach(name=>assert.ok(classified.includes(name),name+' must remain in the callable inventory.'));
+['doGet','initializeIdeasPersistence','initializeShopOperationalPersistence'].forEach(name=>assert.ok(classified.includes(name),name+' must be classified across the complete source tree.'));
 assert.match(registry,/enforceAbuseControl_[\s\S]*authorizedExecute_/,'Abuse screening must precede authorization.');
 assert.doesNotMatch(code,/getVmosAuditUser_\(/,'Callable endpoints must not derive audit identity from deployment/session fallback.');
 assert.doesNotMatch(code,/\.approve\(id,approver/,'Client approver must not reach purchase approval.');

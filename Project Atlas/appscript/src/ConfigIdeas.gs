@@ -43,6 +43,9 @@ function validateIdeasMapping_(mapping, name) {
 
 /** Manual-only creation of the separate Ideas store. Never call at runtime. */
 function initializeIdeasPersistence() {
+  return callable_('initializeIdeasPersistence','ADMINISTRATIVE',function(){return initializeIdeasPersistence_();});
+}
+function initializeIdeasPersistence_() {
   var config = getIdeasConfig_(), spreadsheet = SpreadsheetApp.openById(config.spreadsheetId);
   return {
     ok: true,

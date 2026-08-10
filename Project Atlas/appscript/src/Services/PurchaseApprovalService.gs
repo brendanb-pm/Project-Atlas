@@ -2,11 +2,12 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService(repository, config, auditUser) {
+function PurchaseApprovalService(repository, config, auditUser, lock) {
   this.config = config || getPurchaseApprovalConfig_();
   this.repository = repository || new PurchaseApprovalRepository(this.config);
   this.auditUser = auditUser || getVmosAuditUser_;
   this.authoritativeAudit = typeof auditUser === 'function';
+  this.lock=lock||null;
 }
 
 PurchaseApprovalService.prototype.list = function () { return this.repository.list(); };
@@ -42,6 +43,7 @@ PurchaseApprovalService.prototype.submit = function (input) {
 };
 
 PurchaseApprovalService.prototype.approve = function (id, approver, notes) {
+  return this.withMutationLock_(function(){
   var request = this.get(id);
   if (this.authoritativeAudit) approver = this.auditUser();
   requireValue_(approver, 'Approver');
@@ -56,9 +58,11 @@ PurchaseApprovalService.prototype.approve = function (id, approver, notes) {
   var changes = { status: 'APPROVED', approver: normalizedApprover, approvedAt: now, updatedAt: now, updatedBy: normalizedApprover };
   if (notes !== undefined && notes !== null && String(notes).trim() !== '') changes.notes = String(notes).trim();
   return this.repository.updateById(id, changes);
+  }.bind(this));
 };
 
 PurchaseApprovalService.prototype.recordReceipt = function (id, receiptReference, actualPurchaseAmount, actor) {
+  return this.withMutationLock_(function(){
   var request = this.get(id);
   requireValue_(receiptReference, 'Receipt reference');
   if (['APPROVED', 'APPROVED_NO_APPROVAL_REQUIRED'].indexOf(request.status) === -1) {
@@ -74,7 +78,9 @@ PurchaseApprovalService.prototype.recordReceipt = function (id, receiptReference
   var actual = normalizeActualPurchaseAmount_(actualPurchaseAmount);
   if (actual !== '') changes.actualPurchaseAmount = actual;
   return this.repository.updateById(id, changes);
+  }.bind(this));
 };
+PurchaseApprovalService.prototype.withMutationLock_=function(operation){if(!this.lock)return operation();this.lock.waitLock(10000);try{return operation();}finally{this.lock.releaseLock();}};
 
 function newPurchaseApprovalId_() { return 'PUR-' + Utilities.getUuid().toUpperCase(); }
 function samePurchaseActor_(left, right) { return String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase(); }
