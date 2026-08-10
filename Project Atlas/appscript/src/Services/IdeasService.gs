@@ -3,9 +3,10 @@
  * capture and promotion are append-only records; promotion only signals an
  * explicit handoff request and never creates a project or task.
  */
-function IdeasService(ideasRepository, eventsRepository) {
+function IdeasService(ideasRepository, eventsRepository, auditUser) {
   this.ideas = ideasRepository || new IdeasRepository();
   this.events = eventsRepository || new IdeaEventRepository();
+  this.auditUser = auditUser || getVmosAuditUser_;
 }
 
 IdeasService.prototype.list = function () {
@@ -19,7 +20,7 @@ IdeasService.prototype.capture = function (input) {
   requireValue_(input.title, 'title');
   var now = new Date(), idea = {
     id: 'IDEA-' + Utilities.getUuid().toUpperCase(), title: input.title, description: input.description || '',
-    category: input.category || '', createdAt: now, createdBy: getVmosAuditUser_()
+    category: input.category || '', createdAt: now, createdBy: this.auditUser()
   };
   var lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
@@ -52,6 +53,6 @@ IdeasService.prototype.toView_ = function (idea) {
 IdeasService.prototype.appendEvent_ = function (ideaId, eventType, note) {
   return this.events.append({
     id: 'IDEA-EVT-' + Utilities.getUuid().toUpperCase(), ideaId: ideaId, eventType: eventType,
-    occurredAt: new Date(), actor: getVmosAuditUser_(), note: note || ''
+    occurredAt: new Date(), actor: this.auditUser(), note: note || ''
   });
 };

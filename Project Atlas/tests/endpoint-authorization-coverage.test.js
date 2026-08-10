@@ -1,0 +1,20 @@
+const assert=require('assert');
+const fs=require('fs');
+const path=require('path');
+const base=path.join(__dirname,'..','appscript','src');
+const code=fs.readFileSync(path.join(base,'UI','Code.gs'),'utf8');
+const registry=fs.readFileSync(path.join(base,'Services','EndpointAuthorizationRegistry.gs'),'utf8');
+const callableNames=Array.from(code.matchAll(/^function\s+([A-Za-z0-9_]+)\(/gm)).map(match=>match[1]).filter(name=>!['doGet','callable_'].includes(name));
+assert.ok(callableNames.length>30,'Expected the complete callable surface.');
+callableNames.forEach(name=>{
+  assert.match(registry,new RegExp('(?:^|\\s)'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*:'),name+' must be classified.');
+  const line=code.split(/\r?\n/).find(candidate=>candidate.includes('function '+name+'('));
+  assert.ok(line.includes("callable_('"+name+"'"),name+' must enter the universal callable boundary.');
+});
+const classified=Array.from(registry.matchAll(/([A-Za-z][A-Za-z0-9_]*):\{kind:/g)).map(match=>match[1]);
+assert.deepEqual(classified.sort(),callableNames.sort(),'Inventory and callable surface must match exactly.');
+assert.match(registry,/enforceAbuseControl_[\s\S]*authorizedExecute_/,'Abuse screening must precede authorization.');
+assert.doesNotMatch(code,/getVmosAuditUser_\(/,'Callable endpoints must not derive audit identity from deployment/session fallback.');
+assert.doesNotMatch(code,/\.approve\(id,approver/,'Client approver must not reach purchase approval.');
+assert.doesNotMatch(code,/recordReceipt\(id,reference,actor/,'Client receipt actor must not reach persistence.');
+console.log('Atlas callable endpoint authorization coverage tests passed:',callableNames.length,'classified endpoints');

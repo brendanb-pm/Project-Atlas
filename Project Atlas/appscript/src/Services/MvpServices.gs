@@ -1,16 +1,17 @@
-function MvpService(entityName) { this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = createRepository_(entityName); }
+function MvpService(entityName, dependencies) { dependencies=dependencies||{}; this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = dependencies.repository||createRepository_(entityName); this.auditUser=dependencies.auditUser||getVmosAuditUser_; }
 MvpService.prototype.list = function () { return this.repository.list(); };
 MvpService.prototype.get = function (id) { return this.repository.findById(id); };
 MvpService.prototype.update = function (id, changes) {
   if (!id) throw new VmosValidationError('Record ID is required.');
   changes = changes || {};
   if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError('Primary key cannot be changed.');
+  ['createdBy','updatedBy','createdAt'].forEach(function(key){if(Object.prototype.hasOwnProperty.call(changes,key))delete changes[key];});
   var existing = this.get(id), proposed = {};
   Object.keys(existing).forEach(function (key) { proposed[key] = existing[key]; });
   Object.keys(changes).forEach(function (key) { proposed[key] = changes[key]; });
   validateEntityInput_(this.definition, proposed); this.validateRelationships_(proposed);
   if (this.definition.fields.updatedAt) changes.updatedAt = new Date();
-  if (this.definition.fields.updatedBy) changes.updatedBy = getVmosAuditUser_();
+  if (this.definition.fields.updatedBy) changes.updatedBy = this.auditUser();
   return this.repository.updateById(id, changes);
 };
 MvpService.prototype.create = function (input) {
@@ -23,8 +24,8 @@ MvpService.prototype.create = function (input) {
   input.id = generateVmosId_(this.definition.idPrefix, this.repository);
   if (this.definition.fields.createdAt) input.createdAt = now;
   if (this.definition.fields.updatedAt) input.updatedAt = now;
-  if (this.definition.fields.createdBy) input.createdBy = getVmosAuditUser_();
-  if (this.definition.fields.updatedBy) input.updatedBy = getVmosAuditUser_();
+  if (this.definition.fields.createdBy) input.createdBy = this.auditUser();
+  if (this.definition.fields.updatedBy) input.updatedBy = this.auditUser();
   if (this.definition.fields.status && !input.status) input.status = this.defaultStatus_();
   return this.repository.insert(input);
 };

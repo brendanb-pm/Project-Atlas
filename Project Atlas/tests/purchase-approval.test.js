@@ -56,4 +56,25 @@ assert.equal(lowSpend.status, 'APPROVED_NO_APPROVAL_REQUIRED');
 assert.equal(lowSpend.actualPurchaseAmount, 499.5);
 assert.throws(() => service.approve(lowSpend.id, 'Josh@Vitality.test'), /Only pending over-threshold/);
 
+// MOS-121G: endpoint-injected authoritative identity defeats requester,
+// approver, and receipt-recorder spoofing.
+const securedRecords = [];
+const securedRepository = {
+  list: () => securedRecords.slice(),
+  findById: (id) => securedRecords.find((item) => item.id === id),
+  create: (record) => { securedRecords.push({ ...record }); return record; },
+  updateById: (id, changes) => Object.assign(securedRecords.find((item) => item.id === id), changes)
+};
+let authoritativeUser = 'USR-REQUESTER';
+const secured = new context.PurchaseApprovalService(securedRepository, { threshold: 500 }, () => authoritativeUser);
+const securedRequest = secured.submit({ ...requestFields, requester: 'FORGED-REQUESTER', amount: 501 });
+assert.equal(securedRequest.requester, 'USR-REQUESTER');
+assert.equal(securedRequest.createdBy, 'USR-REQUESTER');
+assert.throws(() => secured.approve(securedRequest.id, 'FORGED-APPROVER'), /Requester and approver/);
+authoritativeUser = 'USR-APPROVER';
+const securedApproved = secured.approve(securedRequest.id, 'FORGED-APPROVER');
+assert.equal(securedApproved.approver, 'USR-APPROVER');
+secured.recordReceipt(securedRequest.id, 'SAFE-RECEIPT', 490, 'FORGED-RECORDER');
+assert.equal(securedRepository.findById(securedRequest.id).updatedBy, 'USR-APPROVER');
+
 console.log('VMOS purchase approval tests passed');

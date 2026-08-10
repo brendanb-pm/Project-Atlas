@@ -2,9 +2,11 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService(repository, config) {
+function PurchaseApprovalService(repository, config, auditUser) {
   this.config = config || getPurchaseApprovalConfig_();
   this.repository = repository || new PurchaseApprovalRepository(this.config);
+  this.auditUser = auditUser || getVmosAuditUser_;
+  this.authoritativeAudit = typeof auditUser === 'function';
 }
 
 PurchaseApprovalService.prototype.list = function () { return this.repository.list(); };
@@ -12,7 +14,8 @@ PurchaseApprovalService.prototype.get = function (id) { return this.repository.f
 
 PurchaseApprovalService.prototype.submit = function (input) {
   input = input || {};
-  requireValue_(input.requester, 'Requester');
+  var auditActor=this.auditUser(), authoritativeRequester=this.authoritativeAudit?auditActor:input.requester;
+  requireValue_(authoritativeRequester, 'Requester');
   requireValue_(input.vendor, 'Vendor');
   requireValue_(input.category, 'Category');
   requireValue_(input.classification, 'Classification');
@@ -28,18 +31,19 @@ PurchaseApprovalService.prototype.submit = function (input) {
   var actualPurchaseAmount = normalizeActualPurchaseAmount_(input.actualPurchaseAmount);
   var now = new Date(), requiresApproval = amount > this.config.threshold;
   return this.repository.create({
-    id: newPurchaseApprovalId_(), requestDate: now, requester: String(input.requester).trim(), vendor: String(input.vendor).trim(),
+    id: newPurchaseApprovalId_(), requestDate: now, requester: String(authoritativeRequester).trim(), vendor: String(input.vendor).trim(),
     category: String(input.category).trim(), classification: classification, businessJustification: String(input.businessJustification).trim(),
     expectedRoiNeed: String(input.expectedRoiNeed).trim(), description: String(input.description).trim(), amount: amount, actualPurchaseAmount: actualPurchaseAmount,
     status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED_NO_APPROVAL_REQUIRED', approvalRequired: requiresApproval,
     approver: '', approvedAt: '', receiptReference: input.receiptReference ? String(input.receiptReference).trim() : '',
     notes: input.notes ? String(input.notes).trim() : '', createdAt: now, updatedAt: now,
-    createdBy: getVmosAuditUser_(), updatedBy: getVmosAuditUser_()
+    createdBy: auditActor, updatedBy: auditActor
   });
 };
 
 PurchaseApprovalService.prototype.approve = function (id, approver, notes) {
   var request = this.get(id);
+  if (this.authoritativeAudit) approver = this.auditUser();
   requireValue_(approver, 'Approver');
   var normalizedApprover = String(approver).trim();
   if (request.status !== 'PENDING_APPROVAL' || request.approvalRequired !== true) {
@@ -65,8 +69,8 @@ PurchaseApprovalService.prototype.recordReceipt = function (id, receiptReference
     throw new VmosValidationError('Receipt reference is already recorded and cannot be replaced.');
   }
   if (request.receiptReference) return request;
-  requireValue_(actor || getVmosAuditUser_(), 'Receipt recorder');
-  var changes = { receiptReference: reference, updatedAt: new Date(), updatedBy: String(actor || getVmosAuditUser_()).trim() };
+  var authoritativeActor=this.auditUser(); requireValue_(authoritativeActor, 'Receipt recorder');
+  var changes = { receiptReference: reference, updatedAt: new Date(), updatedBy: String(authoritativeActor).trim() };
   var actual = normalizeActualPurchaseAmount_(actualPurchaseAmount);
   if (actual !== '') changes.actualPurchaseAmount = actual;
   return this.repository.updateById(id, changes);

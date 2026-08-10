@@ -25,6 +25,15 @@ The configured mapping accepts the exact header strings above: no column positio
 
 Security gate: follow `MOS-121C-Deployment-Security-Profiles-and-Enforcement-Plan.md`. The current `USER_DEPLOYING` + `ANYONE` manifest is not an approved profile for writable production operation until verified authentication, active VMOS membership, capability authorization, and authoritative audit context are implemented and validated. This document does not authorize changing deployment access.
 
+MOS-121G implements the application boundary but does not activate it. Follow
+`MOS-121G-Identity-Tenant-Capability-and-Audit-Enforcement.md` before any
+writable deployment: provision and review the additive `AtlasUsers`,
+`TenantMemberships`, and `ExternalIdentityReferences` headers; set the trusted
+tenant and enforcement mode only in controlled configuration; seed reviewed
+memberships; prove server-side caller identity in non-production; and pass the
+independent MOS-121H security gate. `DISABLED_FOR_DEVELOPMENT` and `VALIDATION`
+are never approved production security modes.
+
 From the repository's `Project Atlas/appscript` directory:
 
 1. Copy `.clasp.json.example` to `.clasp.json` and replace only `REPLACE_WITH_YOUR_EXISTING_APPS_SCRIPT_ID` with the ID of the existing production Apps Script project. `.clasp.json` is ignored by Git and must never be committed.

@@ -71,9 +71,9 @@ assert.equal(test.operations.gets, 0);
 const code = fs.readFileSync(path.join(base, 'UI', 'Code.gs'), 'utf8');
 ['getMvpBootstrap', 'getCalendarWorkspace', 'getShopDashboard', 'createMvpRecord', 'createSalesActivity', 'captureIdea', 'recordCashReceipt', 'approvePurchaseRequest', 'transitionShopFloorJob'].forEach((endpoint) => {
   const line = code.split(/\r?\n/).find((candidate) => candidate.includes('function ' + endpoint + '('));
-  assert.ok(line && line.includes('enforceAbuseControl_'), endpoint + ' must enforce abuse control before expensive work.');
+  assert.ok(line && line.includes("callable_('" + endpoint + "'"), endpoint + ' must use the classified callable boundary.');
 });
-assert.match(code, /transitionShopFloorJob','SHOP_FLOOR_COMMAND',qrToken/, 'QR commands require a token-scoped limiter signal.');
+assert.match(code, /function transitionShopFloorJob[^\n]+SHOP_FLOOR_COMMAND[^\n]+,qrToken\);/, 'QR commands require a token-scoped limiter signal.');
 assert.doesNotMatch(fs.readFileSync(path.join(base, 'UI', 'SalesActivity.html'), 'utf8'), /withFailureHandler\([^)]*=>?[^)]*\.message/, 'Sales Activity transport failures must not echo runtime errors.');
 
 const errors = [];
