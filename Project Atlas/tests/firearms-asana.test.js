@@ -20,7 +20,7 @@ const workOrders = {
 const eventRepo = { append: value => { events.push(value); return value; } };
 const commands = { values: {}, has(id) { return !!this.values[id]; }, get(id) { return this.values[id]; }, put(id, value) { this.values[id] = value; } };
 const firearmsRecords = { rows: [], create: value => { firearmsRecords.rows.push(value); return value; } };
-const workflow = new context.FirearmsWorkflowService({ workOrders, events: eventRepo, commands, firearmsRecords, clock: () => new Date('2026-08-07T12:00:00Z') });
+const workflow = new context.FirearmsWorkflowService_({ workOrders, events: eventRepo, commands, firearmsRecords, clock: () => new Date('2026-08-07T12:00:00Z') });
 
 const intake = { customer: { name: 'Tom' }, item: { itemType: 'Slide' }, requestedWork: { services: ['Optic Cut'] }, authorization: { authorized: true } };
 const created = workflow.createWorkOrder(intake, 'intake-1');
@@ -30,7 +30,7 @@ assert.equal(workflow.createWorkOrder(intake, 'intake-1'), created, 'intake comm
 assert.throws(() => workflow.createWorkOrder(Object.assign({}, intake, { authorization: { authorized: false } }), 'intake-2'), /authorization/);
 assert.equal(workflow.canTransition('IN_PROCESS', 'FINAL_QC'), true, 'service paths may skip coating');
 
-const notificationService = new context.CustomerNotificationService({
+const notificationService = new context.CustomerNotificationService_({
   rules: { listEnabled: (workflowId, status) => status === 'COATING' ? [{ id: 'RULE-1', channel: 'TEXT', delayMinutes: 10 }] : [] },
   events: {
     findActive: (jobId, status, ruleId) => notificationEvents.find(e => e.jobId === jobId && e.sourceStatus === status && e.notificationRuleId === ruleId && e.status === 'PENDING'),
@@ -40,8 +40,8 @@ const notificationService = new context.CustomerNotificationService({
   clock: () => new Date('2026-08-07T12:00:00Z')
 });
 const syncRepo = { findByCorrelation: (provider, id) => syncEvents.find(e => e.provider === provider && e.correlationId === id), append: e => { syncEvents.push(e); return e; } };
-const board = new context.ExternalBoardProviderMock();
-const sync = new context.ExternalBoardSyncService({ workflowService: workflow, workOrders, syncEvents: syncRepo, board, notifications: notificationService, statusMappings: { resolve: (provider, section) => section === 'coating-section' ? 'COATING' : section === 'ready-section' ? 'READY_FOR_PICKUP' : null, findExternalState: (workflowId, status) => status === 'COATING' ? { externalSectionId: 'coating-section' } : null }, clock: () => new Date('2026-08-07T12:01:00Z') });
+const board = new context.ExternalBoardProviderMock_();
+const sync = new context.ExternalBoardSyncService_({ workflowService: workflow, workOrders, syncEvents: syncRepo, board, notifications: notificationService, statusMappings: { resolve: (provider, section) => section === 'coating-section' ? 'COATING' : section === 'ready-section' ? 'READY_FOR_PICKUP' : null, findExternalState: (workflowId, status) => status === 'COATING' ? { externalSectionId: 'coating-section' } : null }, clock: () => new Date('2026-08-07T12:01:00Z') });
 
 const allowed = sync.processInboundMove({ provider: 'ASANA', externalTaskId: 'asana-1', externalSectionId: 'coating-section', correlationId: 'event-1', actor: 'Josh' });
 assert.equal(allowed.result, 'SUCCESS'); assert.equal(job.status, 'COATING'); assert.equal(events.filter(e => e.eventType === 'STATUS_CHANGED').length, 1);

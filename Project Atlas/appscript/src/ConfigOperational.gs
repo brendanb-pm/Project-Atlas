@@ -32,7 +32,7 @@ function getShopOperationalConfig_() {
   var baseConfig = getVmosConfig_();
   var rawMapping = PropertiesService.getScriptProperties().getProperty('VMOS_OPERATIONAL_SHEET_MAPPING');
   var mapping = rawMapping ? JSON.parse(rawMapping) : VMOS_DEFAULT_OPERATIONAL_MAPPING;
-  if (!mapping.eventMapping || !mapping.qrMapping) throw new VmosConfigurationError('VMOS_OPERATIONAL_SHEET_MAPPING must define eventMapping and qrMapping.');
+  if (!mapping.eventMapping || !mapping.qrMapping) throw new VmosConfigurationError_('VMOS_OPERATIONAL_SHEET_MAPPING must define eventMapping and qrMapping.');
   validateOperationalMapping_(mapping.eventMapping, 'eventMapping');
   validateOperationalMapping_(mapping.qrMapping, 'qrMapping');
   return { spreadsheetId: baseConfig.spreadsheetId, eventMapping: mapping.eventMapping, qrMapping: mapping.qrMapping };
@@ -40,7 +40,7 @@ function getShopOperationalConfig_() {
 
 function validateOperationalMapping_(mapping, name) {
   if (!mapping || !mapping.sheetName || !mapping.idField || !mapping.fields || !mapping.fields.id || !mapping.headers) {
-    throw new VmosConfigurationError('Operational ' + name + ' is incomplete. Configure sheetName, idField, headers, and fields.id.');
+    throw new VmosConfigurationError_('Operational ' + name + ' is incomplete. Configure sheetName, idField, headers, and fields.id.');
   }
-  if (mapping.headers.indexOf(mapping.idField) === -1) throw new VmosConfigurationError('Operational ' + name + ' headers must include its idField.');
+  if (mapping.headers.indexOf(mapping.idField) === -1) throw new VmosConfigurationError_('Operational ' + name + ' headers must include its idField.');
 }

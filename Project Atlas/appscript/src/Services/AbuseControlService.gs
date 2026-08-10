@@ -8,7 +8,7 @@ var ATLAS_ABUSE_POLICIES = {
   ADMINISTRATIVE: { limit: 10, windowSeconds: 30, failureMode: 'CLOSED' }
 };
 
-function AbuseControlService(dependencies) {
+function AbuseControlService_(dependencies) {
   dependencies = dependencies || {};
   this.cache = dependencies.cache || CacheService.getScriptCache();
   this.lockFactory = dependencies.lockFactory || function () { return LockService.getScriptLock(); };
@@ -18,9 +18,9 @@ function AbuseControlService(dependencies) {
   this.logger = dependencies.logger || function (entry) { try { console.warn(JSON.stringify(entry)); } catch (ignored) {} };
 }
 
-AbuseControlService.prototype.enforce = function (operation, policyName, scope) {
+AbuseControlService_.prototype.enforce = function (operation, policyName, scope) {
   var policy = this.policies[policyName];
-  if (!policy) throw new VmosConfigurationError('Unknown abuse-control policy.');
+  if (!policy) throw new VmosConfigurationError_('Unknown abuse-control policy.');
   var checks = [{ suffix: 'GLOBAL', limit: policy.globalLimit || policy.limit }];
   if (scope && policy.globalLimit) checks.push({ suffix: 'SCOPE:' + this.digest(String(scope)), limit: policy.limit });
   var lock = this.lockFactory(), acquired = false, now = this.clock(), self = this;
@@ -33,21 +33,21 @@ AbuseControlService.prototype.enforce = function (operation, policyName, scope) 
   } catch (error) {
     if (error && error.code === 'THROTTLED') throw error;
     this.logger({ type: 'ABUSE_CONTROL_UNAVAILABLE', operation: operation, policy: policyName, failureMode: policy.failureMode });
-    if (policy.failureMode === 'CLOSED') throw new VmosThrottleError('This operation is temporarily unavailable. Try again shortly.', 2);
+    if (policy.failureMode === 'CLOSED') throw new VmosThrottleError_('This operation is temporarily unavailable. Try again shortly.', 2);
     return { allowed: true, degraded: true, policy: policyName };
   } finally {
     if (acquired) lock.releaseLock();
   }
 };
 
-AbuseControlService.prototype.evaluate_ = function (operation, policyName, policy, check, now) {
+AbuseControlService_.prototype.evaluate_ = function (operation, policyName, policy, check, now) {
   var key = 'ABUSE:' + this.digest(operation + '|' + check.suffix), raw = this.cache.get(key), state;
   try { state = raw ? JSON.parse(raw) : null; } catch (ignored) { state = null; }
   if (!state || now - Number(state.startedAt) >= policy.windowSeconds * 1000) state = { count: 0, startedAt: now };
   if (state.count >= check.limit) {
     var retry = Math.max(1, Math.ceil((policy.windowSeconds * 1000 - (now - state.startedAt)) / 1000));
     this.logger({ type: 'REQUEST_THROTTLED', operation: operation, policy: policyName, bucket: key.slice(-12), retryAfterSeconds: retry });
-    throw new VmosThrottleError('Too many requests. Wait briefly, then try again.', retry);
+    throw new VmosThrottleError_('Too many requests. Wait briefly, then try again.', retry);
   }
   state.count += 1;
   return { key: key, state: state };
@@ -59,5 +59,5 @@ function abuseDigest_(value) {
 }
 
 function enforceAbuseControl_(operation, policyName, scope) {
-  return new AbuseControlService().enforce(operation, policyName, scope || '');
+  return new AbuseControlService_().enforce(operation, policyName, scope || '');
 }

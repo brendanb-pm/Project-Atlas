@@ -7,11 +7,11 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'appscript', 'src', 'S
 const rows = [];
 const context = vm.createContext({
   String, Date, Array, Object, Error,
-  VmosValidationError: function VmosValidationError(message) { this.message = message; },
+  VmosValidationError_: function VmosValidationError_(message) { this.message = message; },
   getVmosAuditUser_: () => 'Josh'
 });
 vm.runInContext(source, context);
-const service = new context.ProcessTrialService({
+const service = new context.ProcessTrialService_({
   repository: { append: (row) => { rows.push(row); return row; }, listByJobId: (id) => rows.filter((row) => row.jobId === id) },
   jobs: { get: (id) => ({ id }) }, clock: () => new Date('2026-08-07T12:00:00.000Z'), actor: () => 'Josh', uuid: () => 'abc'
 });

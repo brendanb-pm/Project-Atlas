@@ -1,32 +1,32 @@
 /** MOS-117E-4 provider-neutral operator orchestration and wall-clock conversion. */
-function CalendarWallClockService() {}
+function CalendarWallClockService_() {}
 
-CalendarWallClockService.prototype.toSchedule = function (input) {
+CalendarWallClockService_.prototype.toSchedule = function (input) {
   input = input || {};
   if (input.startAt || input.endAt) {
     return { startAt: input.startAt, endAt: input.endAt, timeZone: input.timeZone };
   }
   if (!input.date || !input.startTime || !input.endTime || !input.timeZone) {
-    throw new VmosValidationError('Date, start time, end time, and time zone are required.');
+    throw new VmosValidationError_('Date, start time, end time, and time zone are required.');
   }
   var startAt = this.toInstant_(input.date, input.startTime, input.timeZone);
   var endAt = this.toInstant_(input.date, input.endTime, input.timeZone);
   if (new Date(endAt) <= new Date(startAt)) {
-    throw new VmosValidationError('End time must be after start time.');
+    throw new VmosValidationError_('End time must be after start time.');
   }
   return { startAt: startAt, endAt: endAt, timeZone: input.timeZone };
 };
 
-CalendarWallClockService.prototype.toInstant_ = function (dateText, timeText, timeZone) {
+CalendarWallClockService_.prototype.toInstant_ = function (dateText, timeText, timeZone) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateText)) || !/^\d{2}:\d{2}$/.test(String(timeText))) {
-    throw new VmosValidationError('Use a valid date and time.');
+    throw new VmosValidationError_('Use a valid date and time.');
   }
   var parts = String(dateText).split('-').concat(String(timeText).split(':')).map(Number);
   var validation = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], 0, 0));
   if (validation.getUTCFullYear() !== parts[0] || validation.getUTCMonth() !== parts[1] - 1 ||
       validation.getUTCDate() !== parts[2] || validation.getUTCHours() !== parts[3] ||
       validation.getUTCMinutes() !== parts[4]) {
-    throw new VmosValidationError('Use a valid calendar date and time.');
+    throw new VmosValidationError_('Use a valid calendar date and time.');
   }
   var formatter;
   try {
@@ -36,7 +36,7 @@ CalendarWallClockService.prototype.toInstant_ = function (dateText, timeText, ti
       hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
     });
   } catch (error) {
-    throw new VmosValidationError('Select a valid IANA time zone.');
+    throw new VmosValidationError_('Select a valid IANA time zone.');
   }
   var target = { year: parts[0], month: parts[1], day: parts[2], hour: parts[3], minute: parts[4] };
   var naive = Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute, 0, 0);
@@ -50,15 +50,15 @@ CalendarWallClockService.prototype.toInstant_ = function (dateText, timeText, ti
     }
   }
   if (!matches.length) {
-    throw new VmosValidationError('That local time does not exist because of a daylight-saving transition. Choose another time.');
+    throw new VmosValidationError_('That local time does not exist because of a daylight-saving transition. Choose another time.');
   }
   if (matches.length > 1) {
-    throw new VmosValidationError('That local time occurs twice because of a daylight-saving transition. Choose a different time.');
+    throw new VmosValidationError_('That local time occurs twice because of a daylight-saving transition. Choose a different time.');
   }
   return matches[0];
 };
 
-CalendarWallClockService.prototype.parts_ = function (formatter, instant) {
+CalendarWallClockService_.prototype.parts_ = function (formatter, instant) {
   var result = {};
   formatter.formatToParts(instant).forEach(function (part) {
     if (part.type !== 'literal') result[part.type] = Number(part.value);
@@ -66,34 +66,34 @@ CalendarWallClockService.prototype.parts_ = function (formatter, instant) {
   return result;
 };
 
-function CalendarFollowUpOrchestrationService(deps) {
+function CalendarFollowUpOrchestrationService_(deps) {
   this.deps = deps || {};
   this.followUps = this.deps.followUps;
   this.connections = this.deps.connections;
-  this.routing = this.deps.routing || new FollowUpCalendarRoutingService(this.connections);
+  this.routing = this.deps.routing || new FollowUpCalendarRoutingService_(this.connections);
   this.links = this.deps.links;
   this.requests = this.deps.requests;
   this.events = this.deps.events;
   this.providerServices = this.deps.providerServices || {};
   this.enabled = this.deps.enabled !== false;
-  this.wallClock = this.deps.wallClock || new CalendarWallClockService();
+  this.wallClock = this.deps.wallClock || new CalendarWallClockService_();
   this.clock = this.deps.clock || function () { return new Date(); };
   this.id = this.deps.id || function (prefix) { return prefix + '-' + Utilities.getUuid().toUpperCase(); };
 }
 
-CalendarFollowUpOrchestrationService.prototype.schedule = function (id, input, expectedVersion, actor, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.schedule = function (id, input, expectedVersion, actor, correlationId) {
   var schedule = this.wallClock.toSchedule(input);
   var followUp = this.followUps.schedule(id, schedule, expectedVersion, actor, correlationId);
   return { followUp: followUp, sync: this.project_(followUp, correlationId) };
 };
 
-CalendarFollowUpOrchestrationService.prototype.projectExisting = function (id, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.projectExisting = function (id, correlationId) {
   var followUp = this.followUps.repository.get(id);
-  if (!followUp) throw new VmosNotFoundError('Follow-up not found.');
+  if (!followUp) throw new VmosNotFoundError_('Follow-up not found.');
   return { followUp: followUp, sync: this.project_(followUp, correlationId) };
 };
 
-CalendarFollowUpOrchestrationService.prototype.recreateExisting = function (id, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.recreateExisting = function (id, correlationId) {
   var link = this.links.findByFollowUpId(id);
   if (link) {
     link.externalEventId = '';
@@ -104,7 +104,7 @@ CalendarFollowUpOrchestrationService.prototype.recreateExisting = function (id, 
   return this.projectExisting(id, correlationId);
 };
 
-CalendarFollowUpOrchestrationService.prototype.project_ = function (followUp, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.project_ = function (followUp, correlationId) {
   if (!this.enabled) return { result: 'DISABLED', followUpId: followUp.id };
   var route = this.routing.destinationFor(followUp);
   if (route.state !== 'CONNECTED') return { result: 'NOT_CONNECTED', followUpId: followUp.id };
@@ -127,7 +127,7 @@ CalendarFollowUpOrchestrationService.prototype.project_ = function (followUp, co
   }
 };
 
-CalendarFollowUpOrchestrationService.prototype.reassign = function (id, ownerUserId, expectedVersion, actor, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.reassign = function (id, ownerUserId, expectedVersion, actor, correlationId) {
   var before = this.followUps.repository.get(id);
   var previousOwnerUserId = before.ownerUserId;
   var oldLink = this.links.findByFollowUpId(id);
@@ -139,10 +139,10 @@ CalendarFollowUpOrchestrationService.prototype.reassign = function (id, ownerUse
   return { followUp: followUp, previousOwnerUserId: previousOwnerUserId, cleanup: cleanup, sync: projection };
 };
 
-CalendarFollowUpOrchestrationService.prototype.disconnect = function (connectionId, actor, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.disconnect = function (connectionId, actor, correlationId) {
   var connection = this.connections.get(connectionId);
-  if (!connection) throw new VmosNotFoundError('Calendar connection not found.');
-  if (connection.userId !== actor) throw new VmosValidationError('You may disconnect only your own calendar.');
+  if (!connection) throw new VmosNotFoundError_('Calendar connection not found.');
+  if (connection.userId !== actor) throw new VmosValidationError_('You may disconnect only your own calendar.');
   var self = this;
   var results = (this.links.list ? this.links.list() : []).filter(function (link) {
     return link.connectionId === connectionId && !!link.externalEventId;
@@ -156,7 +156,7 @@ CalendarFollowUpOrchestrationService.prototype.disconnect = function (connection
   return { connection: updated, cleanup: results };
 };
 
-CalendarFollowUpOrchestrationService.prototype.cleanup_ = function (followUp, link, connection, operation, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.cleanup_ = function (followUp, link, connection, operation, correlationId) {
   if (!link || !link.externalEventId) return { result: 'NOT_LINKED' };
   if (!this.enabled) {
     var disabled = { result: 'DISABLED', error: 'Calendar synchronization is disabled.' };
@@ -176,7 +176,7 @@ CalendarFollowUpOrchestrationService.prototype.cleanup_ = function (followUp, li
   return result;
 };
 
-CalendarFollowUpOrchestrationService.prototype.attention_ = function (followUp, link, result, operation, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.attention_ = function (followUp, link, result, operation, correlationId) {
   if (!this.requests) return;
   var request = this.requests.create({
     id: this.id('ECR'), provider: link.provider, followUpId: followUp.id,
@@ -192,11 +192,11 @@ CalendarFollowUpOrchestrationService.prototype.attention_ = function (followUp, 
   this.audit_(followUp.id, 'CALENDAR_CLEANUP_FAILED', 'MOS', correlationId, request);
 };
 
-CalendarFollowUpOrchestrationService.prototype.retryCleanup = function (requestId, actor, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.retryCleanup = function (requestId, actor, correlationId) {
   var request = this.requests.get(requestId);
-  if (!request || request.changeType !== 'CLEANUP_FAILED') throw new VmosValidationError('Cleanup review request not found.');
+  if (!request || request.changeType !== 'CLEANUP_FAILED') throw new VmosValidationError_('Cleanup review request not found.');
   if (request.status === 'RESOLVED') return { result: 'ALREADY_RESOLVED', request: request };
-  if (request.status !== 'PENDING_REVIEW') throw new VmosValidationError('Cleanup review request is not pending.');
+  if (request.status !== 'PENDING_REVIEW') throw new VmosValidationError_('Cleanup review request is not pending.');
   request.attemptCount = Number(request.attemptCount || 0) + 1;
   request.lastAttemptAt = this.clock();
   this.audit_(request.followUpId, 'CALENDAR_CLEANUP_RETRY_ATTEMPTED', actor, correlationId, request);
@@ -225,7 +225,7 @@ CalendarFollowUpOrchestrationService.prototype.retryCleanup = function (requestI
   return { result: 'RESOLVED', request: request, cleanup: result };
 };
 
-CalendarFollowUpOrchestrationService.prototype.retryFailed_ = function (request, actor, correlationId, message) {
+CalendarFollowUpOrchestrationService_.prototype.retryFailed_ = function (request, actor, correlationId, message) {
   request.lastError = message;
   request.details = message;
   this.requests.update(request.id, request);
@@ -233,11 +233,11 @@ CalendarFollowUpOrchestrationService.prototype.retryFailed_ = function (request,
   return { result: 'FAILED', error: message, request: request };
 };
 
-CalendarFollowUpOrchestrationService.prototype.acknowledgeCleanup = function (requestId, actor, correlationId) {
+CalendarFollowUpOrchestrationService_.prototype.acknowledgeCleanup = function (requestId, actor, correlationId) {
   var request = this.requests.get(requestId);
-  if (!request || request.changeType !== 'CLEANUP_FAILED') throw new VmosValidationError('Cleanup review request not found.');
+  if (!request || request.changeType !== 'CLEANUP_FAILED') throw new VmosValidationError_('Cleanup review request not found.');
   if (request.status === 'RESOLVED') return { result: 'ALREADY_RESOLVED', request: request };
-  if (request.status !== 'PENDING_REVIEW') throw new VmosValidationError('Cleanup review request is not pending.');
+  if (request.status !== 'PENDING_REVIEW') throw new VmosValidationError_('Cleanup review request is not pending.');
   request.status = 'RESOLVED';
   request.resolvedAt = this.clock();
   request.resolvedBy = actor;
@@ -247,14 +247,14 @@ CalendarFollowUpOrchestrationService.prototype.acknowledgeCleanup = function (re
   return { result: 'RESOLVED', request: request };
 };
 
-CalendarFollowUpOrchestrationService.prototype.audit_ = function (followUpId, eventType, actor, correlationId, details) {
+CalendarFollowUpOrchestrationService_.prototype.audit_ = function (followUpId, eventType, actor, correlationId, details) {
   if (!this.events || typeof this.events.append !== 'function') return;
   var followUp = this.followUps.repository.get(followUpId);
   var version = followUp && Number(followUp.version || 0) || 0;
   this.events.append({id:this.id('FUE'),followUpId:followUpId,eventType:eventType,occurredAt:this.clock(),actor:actor||'MOS',correlationId:correlationId||'',previousVersion:version,newVersion:version,details:JSON.stringify(details||{})});
 };
 
-CalendarFollowUpOrchestrationService.prototype.resetLink_ = function (link) {
+CalendarFollowUpOrchestrationService_.prototype.resetLink_ = function (link) {
   if (!link) return;
   link.connectionId = '';
   link.calendarId = '';
@@ -266,14 +266,14 @@ CalendarFollowUpOrchestrationService.prototype.resetLink_ = function (link) {
 };
 
 function createCalendarFollowUpOrchestration_() {
-  var connections = new CalendarConnectionService({ repository: new UserCalendarConnectionRepository() });
+  var connections = new CalendarConnectionService_({ repository: new UserCalendarConnectionRepository_() });
   var providerServices = typeof createConfiguredCalendarProviderServices_ === 'function'
     ? createConfiguredCalendarProviderServices_()
     : {};
-  return new CalendarFollowUpOrchestrationService({
+  return new CalendarFollowUpOrchestrationService_({
     followUps: createFollowUpService_(), connections: connections,
-    routing: new FollowUpCalendarRoutingService(connections),
-    links: new CalendarFollowUpLinkRepository(), requests: new ExternalChangeRequestRepository(), events: new FollowUpEventRepository(),
+    routing: new FollowUpCalendarRoutingService_(connections),
+    links: new CalendarFollowUpLinkRepository_(), requests: new ExternalChangeRequestRepository_(), events: new FollowUpEventRepository_(),
     providerServices: providerServices,
     enabled: getCalendarFollowUpConfig_().enabled
   });

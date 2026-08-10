@@ -17,11 +17,11 @@ const context = vm.createContext({
 const records = [];
 const repository = {
   list: () => records.slice(),
-  findById: (id) => { const record = records.find((item) => item.id === id); if (!record) throw new context.VmosNotFoundError('missing'); return record; },
+  findById: (id) => { const record = records.find((item) => item.id === id); if (!record) throw new context.VmosNotFoundError_('missing'); return record; },
   create: (record) => { records.push({ ...record }); return record; },
   updateById: (id, changes) => { const record = repository.findById(id); Object.assign(record, changes); return record; }
 };
-const service = new context.PurchaseApprovalService(repository, { threshold: 500 });
+const service = new context.PurchaseApprovalService_(repository, { threshold: 500 });
 
 const requestFields = { requester: 'Josh@Vitality.test', vendor: 'Acme Tool', category: 'Cutting tools', classification: 'Job', businessJustification: 'Replace failed Tool #3', expectedRoiNeed: 'Restore machining capacity', description: 'Replacement drill' };
 assert.throws(() => service.submit({ ...requestFields, amount: 0 }), /greater than zero/);
@@ -66,7 +66,7 @@ const securedRepository = {
   updateById: (id, changes) => Object.assign(securedRecords.find((item) => item.id === id), changes)
 };
 let authoritativeUser = 'USR-REQUESTER';
-const secured = new context.PurchaseApprovalService(securedRepository, { threshold: 500 }, () => authoritativeUser);
+const secured = new context.PurchaseApprovalService_(securedRepository, { threshold: 500 }, () => authoritativeUser);
 const securedRequest = secured.submit({ ...requestFields, requester: 'FORGED-REQUESTER', amount: 501 });
 assert.equal(securedRequest.requester, 'USR-REQUESTER');
 assert.equal(securedRequest.createdBy, 'USR-REQUESTER');

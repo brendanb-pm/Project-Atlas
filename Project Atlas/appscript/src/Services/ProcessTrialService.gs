@@ -10,34 +10,34 @@ var VMOS_PROCESS_TRIAL_MAPPING = {
   }
 };
 
-function ProcessTrialRepository() {
+function ProcessTrialRepository_() {
   var config = getVmosConfig_();
-  this.repository = new SheetsRepository('ProcessTrial', VMOS_PROCESS_TRIAL_MAPPING, SpreadsheetApp.openById(config.spreadsheetId));
+  this.repository = new SheetsRepository_('ProcessTrial', VMOS_PROCESS_TRIAL_MAPPING, SpreadsheetApp.openById(config.spreadsheetId));
 }
-ProcessTrialRepository.prototype.list = function () { return this.repository.list(); };
-ProcessTrialRepository.prototype.append = function (record) { return this.repository.insert(record); };
-ProcessTrialRepository.prototype.listByJobId = function (jobId) { return this.list().filter(function (record) { return String(record.jobId) === String(jobId); }); };
+ProcessTrialRepository_.prototype.list = function () { return this.repository.list(); };
+ProcessTrialRepository_.prototype.append = function (record) { return this.repository.insert(record); };
+ProcessTrialRepository_.prototype.listByJobId = function (jobId) { return this.list().filter(function (record) { return String(record.jobId) === String(jobId); }); };
 
-function ProcessTrialService(dependencies) {
+function ProcessTrialService_(dependencies) {
   dependencies = dependencies || {};
-  this.repository = dependencies.repository || new ProcessTrialRepository();
-  this.jobs = dependencies.jobs || new MvpService('Job');
+  this.repository = dependencies.repository || new ProcessTrialRepository_();
+  this.jobs = dependencies.jobs || new MvpService_('Job');
   this.clock = dependencies.clock || function () { return new Date(); };
   this.actor = dependencies.actor || getVmosAuditUser_;
   this.uuid = dependencies.uuid || function () { return Utilities.getUuid(); };
 }
-ProcessTrialService.prototype.record = function (input) {
+ProcessTrialService_.prototype.record = function (input) {
   input = input || {};
   var classification = String(input.parameterClassification || '').toUpperCase();
-  if (['CALCULATED', 'TEST', 'PROVEN', 'FAILED'].indexOf(classification) === -1) throw new VmosValidationError('Parameter classification must be CALCULATED, TEST, PROVEN, or FAILED.');
-  if (!String(input.outcome || '').trim()) throw new VmosValidationError('Outcome is required so the observation is useful later.');
+  if (['CALCULATED', 'TEST', 'PROVEN', 'FAILED'].indexOf(classification) === -1) throw new VmosValidationError_('Parameter classification must be CALCULATED, TEST, PROVEN, or FAILED.');
+  if (!String(input.outcome || '').trim()) throw new VmosValidationError_('Outcome is required so the observation is useful later.');
   if (input.jobId) this.jobs.get(input.jobId);
   var now = this.clock();
   return this.repository.append({
     id: 'PTR-' + this.uuid().toUpperCase(), jobId: input.jobId || '', machine: input.machine || '', material: input.material || '', operation: input.operation || '', tool: input.tool || '', toolNumber: input.toolNumber || '', diameter: input.diameter || '', holder: input.holder || '', stickout: input.stickout || '', rpm: input.rpm || '', feed: input.feed || '', docPeck: input.docPeck || '', coolant: input.coolant || '', outcome: input.outcome, toolLife: input.toolLife || '', failureMode: input.failureMode || '', parameterClassification: classification, notes: input.notes || '', observedAt: input.observedAt || now, recordedBy: this.actor(), createdAt: now
   });
 };
-ProcessTrialService.prototype.listForJob = function (jobId) {
-  if (!jobId) throw new VmosValidationError('Job ID is required.');
+ProcessTrialService_.prototype.listForJob = function (jobId) {
+  if (!jobId) throw new VmosValidationError_('Job ID is required.');
   return this.repository.listByJobId(jobId).sort(function (left, right) { return String(right.observedAt || '').localeCompare(String(left.observedAt || '')); });
 };

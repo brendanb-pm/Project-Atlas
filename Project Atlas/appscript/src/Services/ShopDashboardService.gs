@@ -2,24 +2,24 @@
  * Read-only operational metrics for the shop floor. Financial values are
  * order values, invoices, and payments; none are represented as revenue.
  */
-function ShopDashboardService(dependencies) {
+function ShopDashboardService_(dependencies) {
   dependencies = dependencies || {};
-  this.jobs = dependencies.jobs || new MvpService('Job');
-  this.quotes = dependencies.quotes || new MvpService('Quote');
-  this.invoices = dependencies.invoices || new MvpService('Invoice');
-  this.qrTokens = dependencies.qrTokens || new JobQrTokenRepository();
-  this.events = dependencies.events || new JobEventRepository();
+  this.jobs = dependencies.jobs || new MvpService_('Job');
+  this.quotes = dependencies.quotes || new MvpService_('Quote');
+  this.invoices = dependencies.invoices || new MvpService_('Invoice');
+  this.qrTokens = dependencies.qrTokens || new JobQrTokenRepository_();
+  this.events = dependencies.events || new JobEventRepository_();
   this.getWorkflow = dependencies.getWorkflow || getShopWorkflow_;
   this.getStatusCategories = dependencies.getStatusCategories || getShopDashboardStatusCategories_;
   this.now = dependencies.now || function () { return new Date(); };
 }
 
-ShopDashboardService.prototype.getLiveWip = function () {
+ShopDashboardService_.prototype.getLiveWip = function () {
   return this.buildMetrics_(this.shopJobs_());
 };
 
-ShopDashboardService.prototype.getOperatorWorkload = function (operator) {
-  if (!operator) throw new VmosValidationError('Operator is required.');
+ShopDashboardService_.prototype.getOperatorWorkload = function (operator) {
+  if (!operator) throw new VmosValidationError_('Operator is required.');
   var normalizedOperator = normalizeDashboardText_(operator);
   var jobs = this.shopJobs_().filter(function (item) {
     return normalizedOperator === 'UNASSIGNED' ? !String(item.job.operator || '').trim() : normalizeDashboardText_(item.job.operator) === normalizedOperator;
@@ -29,7 +29,7 @@ ShopDashboardService.prototype.getOperatorWorkload = function (operator) {
   return metrics;
 };
 
-ShopDashboardService.prototype.listOperatorWorkloads = function () {
+ShopDashboardService_.prototype.listOperatorWorkloads = function () {
   var self = this, shopJobs = this.shopJobs_(), operators = {};
   shopJobs.forEach(function (item) {
     var operator = String(item.job.operator || '').trim() || 'Unassigned';
@@ -44,7 +44,7 @@ ShopDashboardService.prototype.listOperatorWorkloads = function () {
  * Limits operational metrics to jobs with active, non-revoked QR assignment.
  * A job without that assignment cannot safely be classified against a workflow.
  */
-ShopDashboardService.prototype.shopJobs_ = function () {
+ShopDashboardService_.prototype.shopJobs_ = function () {
   var tokensByJob = {}, duplicateTokenCount = 0, jobs = this.jobs.list();
   this.qrTokens.list().forEach(function (token) {
     if (token.revokedAt || !token.jobId || !token.workflowId) return;
@@ -60,7 +60,7 @@ ShopDashboardService.prototype.shopJobs_ = function () {
   return configured;
 };
 
-ShopDashboardService.prototype.buildMetrics_ = function (shopJobs) {
+ShopDashboardService_.prototype.buildMetrics_ = function (shopJobs) {
   var self = this, active = shopJobs.filter(function (item) { return !self.isComplete_(item); });
   var eventsByJob = this.eventsByJob_();
   var result = {
@@ -108,7 +108,7 @@ ShopDashboardService.prototype.buildMetrics_ = function (shopJobs) {
   return serializeVmosValue_(result);
 };
 
-ShopDashboardService.prototype.eventsByJob_ = function () {
+ShopDashboardService_.prototype.eventsByJob_ = function () {
   var latest = {};
   this.events.list().forEach(function (event) {
     if (!event.jobId || !event.occurredAt) return;
@@ -117,22 +117,22 @@ ShopDashboardService.prototype.eventsByJob_ = function () {
   return latest;
 };
 
-ShopDashboardService.prototype.isBlocked_ = function (item) {
+ShopDashboardService_.prototype.isBlocked_ = function (item) {
   var categories = this.getStatusCategories(item.token.workflowId, item.workflow);
   return (categories.blockedStatuses || []).map(normalizeDashboardText_).indexOf(normalizeDashboardText_(item.job.status)) !== -1;
 };
 
-ShopDashboardService.prototype.isComplete_ = function (item) {
+ShopDashboardService_.prototype.isComplete_ = function (item) {
   var categories = this.getStatusCategories(item.token.workflowId, item.workflow);
   return (categories.completedStatuses || []).map(normalizeDashboardText_).indexOf(normalizeDashboardText_(item.job.status)) !== -1;
 };
 
-ShopDashboardService.prototype.isReady_ = function (item) {
+ShopDashboardService_.prototype.isReady_ = function (item) {
   if (this.isBlocked_(item) || this.isComplete_(item)) return false;
   var categories = this.getStatusCategories(item.token.workflowId, item.workflow);
   return (categories.readyStatuses || []).map(normalizeDashboardText_).indexOf(normalizeDashboardText_(item.job.status)) !== -1;
 };
-ShopDashboardService.prototype.isKnownStatus_ = function (item) {
+ShopDashboardService_.prototype.isKnownStatus_ = function (item) {
   return this.isBlocked_(item) || this.isComplete_(item) || this.isReady_(item) || normalizeDashboardText_(item.job.status) === 'RUNNING';
 };
 

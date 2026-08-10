@@ -2,18 +2,18 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService(repository, config, auditUser, lock) {
+function PurchaseApprovalService_(repository, config, auditUser, lock) {
   this.config = config || getPurchaseApprovalConfig_();
-  this.repository = repository || new PurchaseApprovalRepository(this.config);
+  this.repository = repository || new PurchaseApprovalRepository_(this.config);
   this.auditUser = auditUser || getVmosAuditUser_;
   this.authoritativeAudit = typeof auditUser === 'function';
   this.lock=lock||null;
 }
 
-PurchaseApprovalService.prototype.list = function () { return this.repository.list(); };
-PurchaseApprovalService.prototype.get = function (id) { return this.repository.findById(id); };
+PurchaseApprovalService_.prototype.list = function () { return this.repository.list(); };
+PurchaseApprovalService_.prototype.get = function (id) { return this.repository.findById(id); };
 
-PurchaseApprovalService.prototype.submit = function (input) {
+PurchaseApprovalService_.prototype.submit = function (input) {
   input = input || {};
   var auditActor=this.auditUser(), authoritativeRequester=this.authoritativeAudit?auditActor:input.requester;
   requireValue_(authoritativeRequester, 'Requester');
@@ -26,9 +26,9 @@ PurchaseApprovalService.prototype.submit = function (input) {
   requireValue_(input.amount, 'Amount');
   optionalNumber_(input.amount, 'Amount');
   var amount = Number(input.amount);
-  if (amount <= 0) throw new VmosValidationError('Amount must be greater than zero.');
+  if (amount <= 0) throw new VmosValidationError_('Amount must be greater than zero.');
   var classification = String(input.classification).trim().toUpperCase();
-  if (['JOB', 'CAPEX', 'OVERHEAD'].indexOf(classification) === -1) throw new VmosValidationError('Classification must be Job, CapEx, or Overhead.');
+  if (['JOB', 'CAPEX', 'OVERHEAD'].indexOf(classification) === -1) throw new VmosValidationError_('Classification must be Job, CapEx, or Overhead.');
   var actualPurchaseAmount = normalizeActualPurchaseAmount_(input.actualPurchaseAmount);
   var now = new Date(), requiresApproval = amount > this.config.threshold;
   return this.repository.create({
@@ -42,17 +42,17 @@ PurchaseApprovalService.prototype.submit = function (input) {
   });
 };
 
-PurchaseApprovalService.prototype.approve = function (id, approver, notes) {
+PurchaseApprovalService_.prototype.approve = function (id, approver, notes) {
   return this.withMutationLock_(function(){
   var request = this.get(id);
   if (this.authoritativeAudit) approver = this.auditUser();
   requireValue_(approver, 'Approver');
   var normalizedApprover = String(approver).trim();
   if (request.status !== 'PENDING_APPROVAL' || request.approvalRequired !== true) {
-    throw new VmosValidationError('Only pending over-threshold purchase requests can be approved.');
+    throw new VmosValidationError_('Only pending over-threshold purchase requests can be approved.');
   }
   if (samePurchaseActor_(request.requester, normalizedApprover)) {
-    throw new VmosValidationError('Requester and approver must be different for an over-threshold purchase request.');
+    throw new VmosValidationError_('Requester and approver must be different for an over-threshold purchase request.');
   }
   var now = new Date();
   var changes = { status: 'APPROVED', approver: normalizedApprover, approvedAt: now, updatedAt: now, updatedBy: normalizedApprover };
@@ -61,16 +61,16 @@ PurchaseApprovalService.prototype.approve = function (id, approver, notes) {
   }.bind(this));
 };
 
-PurchaseApprovalService.prototype.recordReceipt = function (id, receiptReference, actualPurchaseAmount, actor) {
+PurchaseApprovalService_.prototype.recordReceipt = function (id, receiptReference, actualPurchaseAmount, actor) {
   return this.withMutationLock_(function(){
   var request = this.get(id);
   requireValue_(receiptReference, 'Receipt reference');
   if (['APPROVED', 'APPROVED_NO_APPROVAL_REQUIRED'].indexOf(request.status) === -1) {
-    throw new VmosValidationError('A receipt can only be recorded after the purchase request is approved.');
+    throw new VmosValidationError_('A receipt can only be recorded after the purchase request is approved.');
   }
   var reference = String(receiptReference).trim();
   if (request.receiptReference && String(request.receiptReference) !== reference) {
-    throw new VmosValidationError('Receipt reference is already recorded and cannot be replaced.');
+    throw new VmosValidationError_('Receipt reference is already recorded and cannot be replaced.');
   }
   if (request.receiptReference) return request;
   var authoritativeActor=this.auditUser(); requireValue_(authoritativeActor, 'Receipt recorder');
@@ -80,13 +80,13 @@ PurchaseApprovalService.prototype.recordReceipt = function (id, receiptReference
   return this.repository.updateById(id, changes);
   }.bind(this));
 };
-PurchaseApprovalService.prototype.withMutationLock_=function(operation){if(!this.lock)return operation();this.lock.waitLock(10000);try{return operation();}finally{this.lock.releaseLock();}};
+PurchaseApprovalService_.prototype.withMutationLock_=function(operation){if(!this.lock)return operation();this.lock.waitLock(10000);try{return operation();}finally{this.lock.releaseLock();}};
 
 function newPurchaseApprovalId_() { return 'PUR-' + Utilities.getUuid().toUpperCase(); }
 function samePurchaseActor_(left, right) { return String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase(); }
 function normalizeActualPurchaseAmount_(value) {
   if (value === undefined || value === null || value === '') return '';
   optionalNumber_(value, 'Actual purchase amount');
-  if (Number(value) <= 0) throw new VmosValidationError('Actual purchase amount must be greater than zero.');
+  if (Number(value) <= 0) throw new VmosValidationError_('Actual purchase amount must be greater than zero.');
   return Number(value);
 }

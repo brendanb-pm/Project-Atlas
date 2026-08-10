@@ -28,7 +28,7 @@ function getIdeasConfig_() {
   var base = getVmosConfig_();
   var raw = PropertiesService.getScriptProperties().getProperty('VMOS_IDEAS_SHEET_MAPPING');
   var mapping = raw ? JSON.parse(raw) : VMOS_DEFAULT_IDEAS_MAPPING;
-  if (!mapping.ideaMapping || !mapping.eventMapping) throw new VmosConfigurationError('VMOS_IDEAS_SHEET_MAPPING must define ideaMapping and eventMapping.');
+  if (!mapping.ideaMapping || !mapping.eventMapping) throw new VmosConfigurationError_('VMOS_IDEAS_SHEET_MAPPING must define ideaMapping and eventMapping.');
   validateIdeasMapping_(mapping.ideaMapping, 'ideaMapping');
   validateIdeasMapping_(mapping.eventMapping, 'eventMapping');
   return { spreadsheetId: base.spreadsheetId, ideaMapping: mapping.ideaMapping, eventMapping: mapping.eventMapping };
@@ -36,14 +36,14 @@ function getIdeasConfig_() {
 
 function validateIdeasMapping_(mapping, name) {
   if (!mapping || !mapping.sheetName || !mapping.idField || !mapping.headers || !mapping.fields || !mapping.fields.id) {
-    throw new VmosConfigurationError('Ideas ' + name + ' is incomplete. Configure sheetName, idField, headers, and fields.id.');
+    throw new VmosConfigurationError_('Ideas ' + name + ' is incomplete. Configure sheetName, idField, headers, and fields.id.');
   }
-  if (mapping.headers.indexOf(mapping.idField) === -1) throw new VmosConfigurationError('Ideas ' + name + ' headers must include its idField.');
+  if (mapping.headers.indexOf(mapping.idField) === -1) throw new VmosConfigurationError_('Ideas ' + name + ' headers must include its idField.');
 }
 
 /** Manual-only creation of the separate Ideas store. Never call at runtime. */
 function initializeIdeasPersistence() {
-  return callable_('initializeIdeasPersistence','ADMINISTRATIVE',function(){return initializeIdeasPersistence_();});
+  return callable_('initializeIdeasPersistence','ADMINISTRATIVE',function(){return initializeIdeasPersistence_();},null,null,securityOperationOptions_('initializeIdeasPersistence','Configuration','IdeasPersistence',{version:1}));
 }
 function initializeIdeasPersistence_() {
   var config = getIdeasConfig_(), spreadsheet = SpreadsheetApp.openById(config.spreadsheetId);
@@ -65,7 +65,7 @@ function ensureIdeasSheet_(spreadsheet, mapping) {
   }
   var actual = sheet.getLastColumn() ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0] : [];
   if (actual.length !== mapping.headers.length || actual.some(function (value, index) { return value !== mapping.headers[index]; })) {
-    throw new VmosConfigurationError('Ideas sheet "' + mapping.sheetName + '" has unexpected headers. No changes were made.');
+    throw new VmosConfigurationError_('Ideas sheet "' + mapping.sheetName + '" has unexpected headers. No changes were made.');
   }
   return { sheetName: mapping.sheetName, created: false };
 }

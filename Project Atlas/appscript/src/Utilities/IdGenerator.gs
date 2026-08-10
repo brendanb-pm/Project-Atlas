@@ -21,7 +21,7 @@ function generateVmosId_(prefix, repository) {
       var number = parseVmosSequence_(row.id, prefix, year);
       return number === null ? max : Math.max(max, number);
     }, 0);
-    if (highest >= 9999) throw new VmosValidationError('ID sequence for ' + prefix + '-' + year + ' has reached its 4-digit limit.');
+    if (highest >= 9999) throw new VmosValidationError_('ID sequence for ' + prefix + '-' + year + ' has reached its 4-digit limit.');
     return expectedPrefix + ('0000' + (highest + 1)).slice(-4);
   } finally { lock.releaseLock(); }
 }

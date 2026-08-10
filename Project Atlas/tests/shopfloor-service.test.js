@@ -22,7 +22,7 @@ const context = vm.createContext({
 ['Utilities/Errors.gs', 'Utilities/Serialization.gs', 'Utilities/WorkflowConfig.gs', 'Repository/OperationalRepositories.gs', 'Services/ShopFloorService.gs'].forEach((file) => vm.runInContext(fs.readFileSync(path.join(base, file), 'utf8'), context));
 
 const jobService = {
-  get(id) { if (!jobs[id]) throw new context.VmosNotFoundError('missing'); return jobs[id]; },
+  get(id) { if (!jobs[id]) throw new context.VmosNotFoundError_('missing'); return jobs[id]; },
   update(id, changes) { Object.assign(jobs[id], changes); return jobs[id]; }
 };
 const eventRepository = {
@@ -31,16 +31,16 @@ const eventRepository = {
 };
 const tokenRepository = {
   findActiveByJobId(id) { return tokens.filter((token) => token.jobId === id && !token.revokedAt); },
-  findByToken(token) { const found = tokens.find((record) => record.id === token); if (!found) throw new context.VmosNotFoundError('missing'); return found; },
+  findByToken(token) { const found = tokens.find((record) => record.id === token); if (!found) throw new context.VmosNotFoundError_('missing'); return found; },
   create(record) { tokens.push(record); return record; },
   revoke(token, actor) { const record = this.findByToken(token); record.revokedAt = new Date('2026-08-10T18:00:00Z'); record.revokedBy = actor; return record; }
 };
-context.MvpService = function (entity) {
+context.MvpService_ = function (entity) {
   if (entity === 'Customer') this.get = () => ({ id: 'CUST-26-0001', name: 'Vitality Test Customer' });
 };
 
 let generatedToken = TOKEN_A;
-const shop = new context.ShopFloorService({
+const shop = new context.ShopFloorService_({
   jobs: jobService, events: eventRepository, qrTokens: tokenRepository,
   auditUser: () => 'authenticated-user-1', tokenGenerator: () => generatedToken,
   clock: () => new Date('2026-08-10T17:00:00Z')
@@ -66,6 +66,12 @@ assert.equal(shop.resolveByQr(TOKEN_A).id, 'JOB-26-0127');
 assert.equal(events.length, 2);
 assert.throws(() => shop.resolveByQr('malformed'), /invalid or no longer available/);
 assert.throws(() => shop.resolveByQr('ffffffffffffffffffffffffffffffff'), /invalid or no longer available/);
+
+context.LockService.getScriptLock = () => ({ waitLock() { tokens[0].revokedAt = new Date('2026-08-10T17:30:00Z'); }, releaseLock() {} });
+assert.throws(() => shop.transition('JOB-26-0127', 'RUNNING', 'cmd-revoke-race', '', TOKEN_A), /invalid or no longer available/, 'QR scope must be revalidated after acquiring the mutation lock.');
+assert.equal(events.some((event) => event.commandId === 'cmd-revoke-race'), false);
+tokens[0].revokedAt = '';
+context.LockService.getScriptLock = () => ({ waitLock() {}, releaseLock() {} });
 
 assert.throws(() => shop.transition('JOB-26-0127', 'RUNNING', 'cmd-no-token', ''), /invalid or no longer available/);
 assert.throws(() => shop.transition('JOB-26-0999', 'RUNNING', 'cmd-wrong-job', '', TOKEN_A), /invalid or no longer available/);

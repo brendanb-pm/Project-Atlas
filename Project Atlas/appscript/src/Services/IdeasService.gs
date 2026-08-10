@@ -3,19 +3,19 @@
  * capture and promotion are append-only records; promotion only signals an
  * explicit handoff request and never creates a project or task.
  */
-function IdeasService(ideasRepository, eventsRepository, auditUser) {
-  this.ideas = ideasRepository || new IdeasRepository();
-  this.events = eventsRepository || new IdeaEventRepository();
+function IdeasService_(ideasRepository, eventsRepository, auditUser) {
+  this.ideas = ideasRepository || new IdeasRepository_();
+  this.events = eventsRepository || new IdeaEventRepository_();
   this.auditUser = auditUser || getVmosAuditUser_;
 }
 
-IdeasService.prototype.list = function () {
+IdeasService_.prototype.list = function () {
   var self = this;
   return this.ideas.list().map(function (idea) { return self.toView_(idea); })
     .sort(function (left, right) { return String(right.createdAt || '').localeCompare(String(left.createdAt || '')); });
 };
 
-IdeasService.prototype.capture = function (input) {
+IdeasService_.prototype.capture = function (input) {
   input = input || {};
   requireValue_(input.title, 'title');
   var now = new Date(), idea = {
@@ -30,17 +30,17 @@ IdeasService.prototype.capture = function (input) {
   } finally { lock.releaseLock(); }
 };
 
-IdeasService.prototype.requestPromotion = function (ideaId, confirmation, note) {
-  if (!ideaId) throw new VmosValidationError('Idea ID is required.');
-  if (confirmation !== true) throw new VmosValidationError('Explicit promotion confirmation is required.');
+IdeasService_.prototype.requestPromotion = function (ideaId, confirmation, note) {
+  if (!ideaId) throw new VmosValidationError_('Idea ID is required.');
+  if (confirmation !== true) throw new VmosValidationError_('Explicit promotion confirmation is required.');
   this.ideas.findById(ideaId);
   var existing = this.events.listByIdeaId(ideaId).filter(function (event) { return event.eventType === 'PROMOTION_REQUESTED'; })[0];
-  if (existing) throw new VmosValidationError('This idea already has an explicit promotion request.');
+  if (existing) throw new VmosValidationError_('This idea already has an explicit promotion request.');
   this.appendEvent_(ideaId, 'PROMOTION_REQUESTED', note || 'Explicitly requested for architecture/client review.');
   return this.toView_(this.ideas.findById(ideaId));
 };
 
-IdeasService.prototype.toView_ = function (idea) {
+IdeasService_.prototype.toView_ = function (idea) {
   var events = this.events.listByIdeaId(idea.id), promotion = events.filter(function (event) { return event.eventType === 'PROMOTION_REQUESTED'; })[0];
   return serializeVmosValue_({
     id: idea.id, title: idea.title, description: idea.description, category: idea.category,
@@ -50,7 +50,7 @@ IdeasService.prototype.toView_ = function (idea) {
   });
 };
 
-IdeasService.prototype.appendEvent_ = function (ideaId, eventType, note) {
+IdeasService_.prototype.appendEvent_ = function (ideaId, eventType, note) {
   return this.events.append({
     id: 'IDEA-EVT-' + Utilities.getUuid().toUpperCase(), ideaId: ideaId, eventType: eventType,
     occurredAt: new Date(), actor: this.auditUser(), note: note || ''

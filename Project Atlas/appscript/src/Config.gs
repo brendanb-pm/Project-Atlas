@@ -16,7 +16,7 @@ var VMOS_DEFAULT_MAPPING = {
 function getVmosConfig_() {
   var properties = PropertiesService.getScriptProperties();
   var spreadsheetId = properties.getProperty('VMOS_SPREADSHEET_ID');
-  if (!spreadsheetId) throw new VmosConfigurationError('VMOS_SPREADSHEET_ID is not configured. See README setup.');
+  if (!spreadsheetId) throw new VmosConfigurationError_('VMOS_SPREADSHEET_ID is not configured. See README setup.');
   var configuredMapping = properties.getProperty('VMOS_SHEET_MAPPING');
   var mapping = configuredMapping ? JSON.parse(configuredMapping) : VMOS_DEFAULT_MAPPING;
   return { spreadsheetId: spreadsheetId, mapping: mapping };

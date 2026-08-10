@@ -50,7 +50,7 @@ const definition = {
   sheetName: 'RFQs', idField: 'ID',
   fields: { id: ['ID'], description: ['Description'], notes: ['Notes'], quantity: ['Quantity'], dueAt: ['Due At'] }
 };
-const repository = new context.SheetsRepository('RFQ', definition, { getSheetByName: () => sheet });
+const repository = new context.SheetsRepository_('RFQ', definition, { getSheetByName: () => sheet });
 const created = repository.insert({ id: 'RFQ-26-0001', description: '=AI_EXTRACTED(A1)', notes: '<script>alert(1)</script>', quantity: 12, dueAt: date });
 assert.equal(created.description, '=AI_EXTRACTED(A1)', 'AI/RFQ text must round-trip literally.');
 assert.equal(created.notes, '<script>alert(1)</script>', 'Notes must retain legitimate visible text.');
@@ -64,12 +64,12 @@ assert.equal(rows[1][1].executedFormula, undefined, 'The stored value must not b
 
 // Browser contracts retain operator-safe validation while hiding internal
 // configuration, repository, provider, stack, path, and identifier details.
-let response = context.toClientError_(new context.VmosValidationError('End time must be after start time.'));
+let response = context.toClientError_(new context.VmosValidationError_('End time must be after start time.'));
 assert.equal(response.error.code, 'VALIDATION_ERROR');
 assert.equal(response.error.message, 'End time must be after start time.');
 assert.match(response.error.referenceId, /^ERR-/);
 
-response = context.toClientError_(new context.VmosConfigurationError('Sheet "SecretWorksheet" missing header "CredentialReference"; VMOS_SECRET_PROPERTY is absent.'));
+response = context.toClientError_(new context.VmosConfigurationError_('Sheet "SecretWorksheet" missing header "CredentialReference"; VMOS_SECRET_PROPERTY is absent.'));
 assert.equal(response.error.code, 'CONFIGURATION_UNAVAILABLE');
 assert.equal(response.error.message, 'This feature is not configured.');
 assert.doesNotMatch(JSON.stringify(response), /SecretWorksheet|CredentialReference|VMOS_SECRET_PROPERTY/);

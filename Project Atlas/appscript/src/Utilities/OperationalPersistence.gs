@@ -5,7 +5,7 @@
  * only after approving the headers in ConfigOperational.gs.
  */
 function initializeShopOperationalPersistence() {
-  return callable_('initializeShopOperationalPersistence','ADMINISTRATIVE',function(){return initializeShopOperationalPersistence_();});
+  return callable_('initializeShopOperationalPersistence','ADMINISTRATIVE',function(){return initializeShopOperationalPersistence_();},null,null,securityOperationOptions_('initializeShopOperationalPersistence','Configuration','ShopOperationalPersistence',{version:1}));
 }
 function initializeShopOperationalPersistence_() {
   var config = getShopOperationalConfig_();
@@ -29,7 +29,7 @@ function ensureOperationalSheet_(spreadsheet, mapping) {
 
   var actualHeaders = sheet.getLastColumn() ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0] : [];
   if (!sameOperationalHeaders_(actualHeaders, mapping.headers)) {
-    throw new VmosConfigurationError('Operational sheet "' + mapping.sheetName + '" already exists but does not have the expected headers. No changes were made.');
+    throw new VmosConfigurationError_('Operational sheet "' + mapping.sheetName + '" already exists but does not have the expected headers. No changes were made.');
   }
   return { sheetName: mapping.sheetName, created: false };
 }

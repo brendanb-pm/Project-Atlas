@@ -4,12 +4,12 @@ const path = require('path');
 const vm = require('vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'appscript', 'src', 'Services', 'CashReceiptService.gs'), 'utf8');
-function VmosValidationError(message) { this.name = 'VmosValidationError'; this.message = message; }
-VmosValidationError.prototype = Object.create(Error.prototype);
+function VmosValidationError_(message) { this.name = 'VmosValidationError_'; this.message = message; }
+VmosValidationError_.prototype = Object.create(Error.prototype);
 const lock = { waitLock() {}, releaseLock() {} };
 const context = vm.createContext({
   Date, String, Number, Object, Array, Error, isNaN, console,
-  VmosValidationError, LockService: { getScriptLock: () => lock },
+  VmosValidationError_, LockService: { getScriptLock: () => lock },
   serializeVmosValue_: (value) => JSON.parse(JSON.stringify(value))
 });
 vm.runInContext(source, context);
@@ -23,7 +23,7 @@ const repository = {
   updateById: (id, changes) => { const row = repository.findById(id); Object.assign(row, changes); return row; }
 };
 const invoices = { get: (id) => ({ id, customerId: 'CUST-26-0001' }) };
-const service = new context.CashReceiptService({
+const service = new context.CashReceiptService_({
   repository, invoices, now: () => new Date('2026-08-07T12:00:00.000Z'), auditUser: () => 'operator@example.com',
   idGenerator: () => 'RCPT-26-0001'
 });

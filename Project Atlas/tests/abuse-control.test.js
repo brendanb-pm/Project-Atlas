@@ -17,7 +17,7 @@ function fixture(options) {
   };
   const lock = options.lock || { tryLock() { operations.locks += 1; return true; }, releaseLock() {} };
   let now = 1000;
-  const service = new context.AbuseControlService({
+  const service = new context.AbuseControlService_({
     cache, lockFactory: () => lock, clock: () => now,
     digest: (value) => crypto.createHash('sha256').update(value).digest('hex').slice(0, 32),
     logger: (entry) => logs.push(entry),
@@ -83,7 +83,7 @@ const errorContext = vm.createContext({
   console: { error: (message) => errors.push(message) }
 });
 vm.runInContext(fs.readFileSync(path.join(base, 'Utilities', 'Errors.gs'), 'utf8'), errorContext);
-const response = errorContext.toClientError_(new errorContext.VmosThrottleError('Too many requests. Wait briefly, then try again.', 7));
+const response = errorContext.toClientError_(new errorContext.VmosThrottleError_('Too many requests. Wait briefly, then try again.', 7));
 assert.equal(response.error.code, 'THROTTLED');
 assert.equal(response.error.retryAfterSeconds, 7);
 assert.doesNotMatch(JSON.stringify(response), /counter|cache|threshold|bucket/i);

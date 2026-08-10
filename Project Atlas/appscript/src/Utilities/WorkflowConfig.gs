@@ -11,7 +11,7 @@ function getShopWorkflowTemplates_() {
 
 function getShopWorkflow_(workflowId) {
   var workflow = getShopWorkflowTemplates_()[workflowId];
-  if (!workflow || !Array.isArray(workflow.states) || !workflow.states.length) throw new VmosConfigurationError('Workflow "' + workflowId + '" is not configured.');
+  if (!workflow || !Array.isArray(workflow.states) || !workflow.states.length) throw new VmosConfigurationError_('Workflow "' + workflowId + '" is not configured.');
   return workflow;
 }
 

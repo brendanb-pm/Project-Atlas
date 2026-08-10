@@ -8,9 +8,9 @@ let sequence = 0;
 const context = vm.createContext({
   Date, Intl, Number, String, Object, Array, JSON,
   Utilities: { getUuid: () => String(++sequence) },
-  VmosValidationError: function (message) { this.message = message; },
-  VmosNotFoundError: function (message) { this.message = message; },
-  VmosConfigurationError: function (message) { this.message = message; }
+  VmosValidationError_: function (message) { this.message = message; },
+  VmosNotFoundError_: function (message) { this.message = message; },
+  VmosConfigurationError_: function (message) { this.message = message; }
 });
 [
   'Services/FollowUpCalendarService.gs',
@@ -18,7 +18,7 @@ const context = vm.createContext({
   'Services/CalendarFollowUpOrchestrationService.gs'
 ].forEach((file) => vm.runInContext(fs.readFileSync(path.join(base, file), 'utf8'), context));
 
-const wallClock = new context.CalendarWallClockService();
+const wallClock = new context.CalendarWallClockService_();
 assert.equal(wallClock.toSchedule({date:'2026-01-15',startTime:'15:00',endTime:'15:30',timeZone:'America/Los_Angeles'}).startAt,'2026-01-15T23:00:00.000Z','Los Angeles standard time');
 assert.equal(wallClock.toSchedule({date:'2026-08-12',startTime:'15:00',endTime:'15:30',timeZone:'America/Los_Angeles'}).startAt,'2026-08-12T22:00:00.000Z','Los Angeles daylight time');
 assert.equal(wallClock.toSchedule({date:'2026-08-12',startTime:'15:00',endTime:'15:30',timeZone:'America/New_York'}).startAt,'2026-08-12T19:00:00.000Z','New York daylight time');
@@ -49,8 +49,8 @@ const requestRepo = {
   update: (id, record) => (requests[requests.findIndex(value => value.id === id)] = record, record)
 };
 const clock = () => new Date('2026-08-08T12:00:00Z');
-const followUps = new context.FollowUpService({repository:followRepo,events:{append:event=>(events.push(event),event)},clock,id:prefix=>prefix+'-'+(++sequence)});
-const connectionService = new context.CalendarConnectionService({repository:connectionRepo,clock,id:prefix=>prefix+'-'+(++sequence)});
+const followUps = new context.FollowUpService_({repository:followRepo,events:{append:event=>(events.push(event),event)},clock,id:prefix=>prefix+'-'+(++sequence)});
+const connectionService = new context.CalendarConnectionService_({repository:connectionRepo,clock,id:prefix=>prefix+'-'+(++sequence)});
 const google = connectionService.create({userId:'Josh',provider:'GOOGLE_CALENDAR',externalCalendarId:'google-sales',connectionStatus:'CONNECTED'});
 const microsoft = connectionService.create({userId:'Brendan',provider:'MICROSOFT_GRAPH_CALENDAR',externalCalendarId:'outlook-sales',connectionStatus:'CONNECTED'});
 const apple = connectionService.create({userId:'Taylor',provider:'APPLE_ICLOUD_CALENDAR',externalCalendarId:'icloud-sales',connectionStatus:'CONNECTED'});
@@ -87,7 +87,7 @@ const providers = {
   MICROSOFT_GRAPH_CALENDAR: fakeProvider('MICROSOFT_GRAPH_CALENDAR'),
   APPLE_ICLOUD_CALENDAR: fakeProvider('APPLE_ICLOUD_CALENDAR')
 };
-const orchestration = new context.CalendarFollowUpOrchestrationService({
+const orchestration = new context.CalendarFollowUpOrchestrationService_({
   followUps, connections:connectionService, links:linkRepo, requests:requestRepo, events:{append:event=>(events.push(event),event)},
   providerServices:providers, wallClock, clock, id:prefix=>prefix+'-'+(++sequence)
 });
@@ -167,7 +167,7 @@ providers.MICROSOFT_GRAPH_CALENDAR=microsoftProvider;
 ['CALENDAR_CLEANUP_FAILED','CALENDAR_CLEANUP_RETRY_ATTEMPTED','CALENDAR_CLEANUP_RETRY_SUCCEEDED','CALENDAR_CLEANUP_RETRY_FAILED','CALENDAR_CLEANUP_ACKNOWLEDGED'].forEach(type=>assert.ok(events.some(event=>event.eventType===type),'audit includes '+type));
 
 const disabledFollow = followUps.create({customerId:'CUST-3',title:'Disabled integration',dueAt:'2026-08-12T09:00:00Z',ownerUserId:'Brendan'},'Brendan');
-const disabled = new context.CalendarFollowUpOrchestrationService({followUps,connections:connectionService,links:linkRepo,requests:requestRepo,providerServices:providers,wallClock,clock,enabled:false,id:prefix=>prefix+'-'+(++sequence)});
+const disabled = new context.CalendarFollowUpOrchestrationService_({followUps,connections:connectionService,links:linkRepo,requests:requestRepo,providerServices:providers,wallClock,clock,enabled:false,id:prefix=>prefix+'-'+(++sequence)});
 const projectsBeforeDisabled = calls.filter(call=>call.type==='project').length;
 result = disabled.schedule(disabledFollow.id,{date:'2026-08-14',startTime:'09:00',endTime:'09:30',timeZone:'America/New_York'},disabledFollow.version,'Brendan','disabled-1');
 assert.equal(result.sync.result,'DISABLED');

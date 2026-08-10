@@ -1,10 +1,10 @@
-function MvpService(entityName, dependencies) { dependencies=dependencies||{}; this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = dependencies.repository||createRepository_(entityName); this.auditUser=dependencies.auditUser||getVmosAuditUser_; }
-MvpService.prototype.list = function () { return this.repository.list(); };
-MvpService.prototype.get = function (id) { return this.repository.findById(id); };
-MvpService.prototype.update = function (id, changes) {
-  if (!id) throw new VmosValidationError('Record ID is required.');
+function MvpService_(entityName, dependencies) { dependencies=dependencies||{}; this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = dependencies.repository||createRepository_(entityName); this.auditUser=dependencies.auditUser||getVmosAuditUser_; }
+MvpService_.prototype.list = function () { return this.repository.list(); };
+MvpService_.prototype.get = function (id) { return this.repository.findById(id); };
+MvpService_.prototype.update = function (id, changes) {
+  if (!id) throw new VmosValidationError_('Record ID is required.');
   changes = changes || {};
-  if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError('Primary key cannot be changed.');
+  if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError_('Primary key cannot be changed.');
   ['createdBy','updatedBy','createdAt'].forEach(function(key){if(Object.prototype.hasOwnProperty.call(changes,key))delete changes[key];});
   var existing = this.get(id), proposed = {};
   Object.keys(existing).forEach(function (key) { proposed[key] = existing[key]; });
@@ -14,7 +14,7 @@ MvpService.prototype.update = function (id, changes) {
   if (this.definition.fields.updatedBy) changes.updatedBy = this.auditUser();
   return this.repository.updateById(id, changes);
 };
-MvpService.prototype.create = function (input) {
+MvpService_.prototype.create = function (input) {
   input = input || {};
   // HTML forms submit blank optional controls. Remove them before validating the
   // workbook mapping so an unused optional field does not require a header.
@@ -29,25 +29,25 @@ MvpService.prototype.create = function (input) {
   if (this.definition.fields.status && !input.status) input.status = this.defaultStatus_();
   return this.repository.insert(input);
 };
-MvpService.prototype.defaultStatus_ = function () { return { Customer: 'Active', RFQ: 'Received', Quote: 'Draft', Job: 'Planned', Invoice: 'Draft' }[this.entityName]; };
-MvpService.prototype.applyWorkflowDefaults_ = function (input) {
-  if (this.entityName === 'Quote' && input.rfqId) { var rfq = new MvpService('RFQ').get(input.rfqId); if (!input.customerId) input.customerId = rfq.customerId; if (!input.quoteDate) input.quoteDate = new Date(); }
-  if (this.entityName === 'Job' && input.quoteId) { var quote = new MvpService('Quote').get(input.quoteId); if (!input.customerId) input.customerId = quote.customerId; }
-  if (this.entityName === 'Invoice' && input.jobId) { var job = new MvpService('Job').get(input.jobId); if (!input.customerId) input.customerId = job.customerId; if (!input.invoiceDate) input.invoiceDate = new Date(); }
+MvpService_.prototype.defaultStatus_ = function () { return { Customer: 'Active', RFQ: 'Received', Quote: 'Draft', Job: 'Planned', Invoice: 'Draft' }[this.entityName]; };
+MvpService_.prototype.applyWorkflowDefaults_ = function (input) {
+  if (this.entityName === 'Quote' && input.rfqId) { var rfq = new MvpService_('RFQ').get(input.rfqId); if (!input.customerId) input.customerId = rfq.customerId; if (!input.quoteDate) input.quoteDate = new Date(); }
+  if (this.entityName === 'Job' && input.quoteId) { var quote = new MvpService_('Quote').get(input.quoteId); if (!input.customerId) input.customerId = quote.customerId; }
+  if (this.entityName === 'Invoice' && input.jobId) { var job = new MvpService_('Job').get(input.jobId); if (!input.customerId) input.customerId = job.customerId; if (!input.invoiceDate) input.invoiceDate = new Date(); }
 };
-MvpService.prototype.validateRelationships_ = function (input) {
-  if (input.customerId) new MvpService('Customer').get(input.customerId);
-  if (this.entityName === 'Quote' && input.rfqId) { var rfq = new MvpService('RFQ').get(input.rfqId); if (rfq.customerId !== input.customerId) throw new VmosValidationError('Quote customer must match its RFQ customer.'); }
-  if (this.entityName === 'Job' && input.quoteId) { var quote = new MvpService('Quote').get(input.quoteId); if (quote.customerId !== input.customerId) throw new VmosValidationError('Job customer must match its quote customer.'); }
-  if (this.entityName === 'Invoice' && input.jobId) { var job = new MvpService('Job').get(input.jobId); if (job.customerId !== input.customerId) throw new VmosValidationError('Invoice customer must match its job customer.'); }
+MvpService_.prototype.validateRelationships_ = function (input) {
+  if (input.customerId) new MvpService_('Customer').get(input.customerId);
+  if (this.entityName === 'Quote' && input.rfqId) { var rfq = new MvpService_('RFQ').get(input.rfqId); if (rfq.customerId !== input.customerId) throw new VmosValidationError_('Quote customer must match its RFQ customer.'); }
+  if (this.entityName === 'Job' && input.quoteId) { var quote = new MvpService_('Quote').get(input.quoteId); if (quote.customerId !== input.customerId) throw new VmosValidationError_('Job customer must match its quote customer.'); }
+  if (this.entityName === 'Invoice' && input.jobId) { var job = new MvpService_('Job').get(input.jobId); if (job.customerId !== input.customerId) throw new VmosValidationError_('Invoice customer must match its job customer.'); }
 };
-function CustomerService() { return new MvpService('Customer'); }
-function RFQService() { return new MvpService('RFQ'); }
-function QuoteService() { return new MvpService('Quote'); }
-function JobService() { return new MvpService('Job'); }
-function InvoiceService() { return new MvpService('Invoice'); }
-function MvpLifecycleService(entityName,actor){this.service=new MvpService(entityName,{auditUser:function(){return actor;}});}
-MvpLifecycleService.prototype.transition=function(id,fromStatus,toStatus){var record=this.service.get(id);if(record.status!==fromStatus)throw new VmosConflictError('Record status changed. Refresh and try again.');return this.service.update(id,{status:toStatus});};
+function CustomerService_() { return new MvpService_('Customer'); }
+function RFQService_() { return new MvpService_('RFQ'); }
+function QuoteService_() { return new MvpService_('Quote'); }
+function JobService_() { return new MvpService_('Job'); }
+function InvoiceService_() { return new MvpService_('Invoice'); }
+function MvpLifecycleService_(entityName,actor){this.service=new MvpService_(entityName,{auditUser:function(){return actor;}});}
+MvpLifecycleService_.prototype.transition=function(id,fromStatus,toStatus){var record=this.service.get(id);if(record.status!==fromStatus)throw new VmosConflictError('Record status changed. Refresh and try again.');return this.service.update(id,{status:toStatus});};
 
 function getVmosAuditUser_() {
   return Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || 'VMOS';

@@ -9,7 +9,7 @@ const context = vm.createContext({
   Utilities: { formatDate: (date) => date.toISOString().slice(0, 10) },
   Session: { getScriptTimeZone: () => 'UTC' },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) },
-  VmosValidationError: function VmosValidationError(message) { this.message = message; },
+  VmosValidationError_: function VmosValidationError_(message) { this.message = message; },
   serializeVmosValue_: (value) => JSON.parse(JSON.stringify(value))
 });
 vm.runInContext(source, context);
@@ -21,7 +21,7 @@ const jobs = [
   { id: 'JOB-4', operator: 'Ana', status: 'RUNNING', dueDate: '2026-08-07' }, // no QR: excluded, disclosed
   { id: 'JOB-5', operator: '', status: 'RUNNING', dueDate: '2026-08-09' }
 ];
-const service = new context.ShopDashboardService({
+const service = new context.ShopDashboardService_({
   jobs: { list: () => jobs },
   quotes: { list: () => [{ id: 'VQT-1', total: 1000 }, { id: 'VQT-2', total: '' }] },
   invoices: { list: () => [{ id: 'INV-1', jobId: 'JOB-1', total: 250, amountPaid: 100 }, { id: 'INV-2', jobId: 'JOB-2', total: 75, amountPaid: '' }] },

@@ -16,6 +16,6 @@ function getCashReceiptConfig_() {
   var baseConfig = getVmosConfig_();
   var rawMapping = PropertiesService.getScriptProperties().getProperty('VMOS_CASH_RECEIPT_MAPPING');
   var mapping = rawMapping ? JSON.parse(rawMapping) : VMOS_DEFAULT_CASH_RECEIPT_MAPPING;
-  if (!mapping.sheetName || !mapping.idField || !mapping.fields || !mapping.fields.id) throw new VmosConfigurationError('VMOS_CASH_RECEIPT_MAPPING is incomplete.');
+  if (!mapping.sheetName || !mapping.idField || !mapping.fields || !mapping.fields.id) throw new VmosConfigurationError_('VMOS_CASH_RECEIPT_MAPPING is incomplete.');
   return { spreadsheetId: baseConfig.spreadsheetId, mapping: mapping };
 }

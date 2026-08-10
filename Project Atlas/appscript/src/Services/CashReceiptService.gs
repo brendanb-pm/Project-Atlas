@@ -1,8 +1,8 @@
 /** MOS-113 receipt/deposit workflow. It never changes invoice balances. */
-function CashReceiptService(dependencies) {
+function CashReceiptService_(dependencies) {
   dependencies = dependencies || {};
-  this.repository = dependencies.repository || new CashReceiptRepository();
-  this.invoices = dependencies.invoices || new MvpService('Invoice');
+  this.repository = dependencies.repository || new CashReceiptRepository_();
+  this.invoices = dependencies.invoices || new MvpService_('Invoice');
   this.now = dependencies.now || function () { return new Date(); };
   this.auditUser = dependencies.auditUser || getVmosAuditUser_;
   // recordReceipt already holds the script lock for command idempotency, so
@@ -10,7 +10,7 @@ function CashReceiptService(dependencies) {
   this.idGenerator = dependencies.idGenerator || generateCashReceiptIdUnderLock_;
 }
 
-CashReceiptService.prototype.recordReceipt = function (input) {
+CashReceiptService_.prototype.recordReceipt = function (input) {
   var self = this; input = input || {};
   requireCashReceipt_(input.invoiceId, 'Invoice ID');
   requireCashReceipt_(input.customerId, 'Customer ID');
@@ -23,7 +23,7 @@ CashReceiptService.prototype.recordReceipt = function (input) {
     var existing = self.repository.findByReceiptCommandId(input.receiptCommandId);
     if (existing) return existing;
     var invoice = self.invoices.get(input.invoiceId);
-    if (String(invoice.customerId) !== String(input.customerId)) throw new VmosValidationError('Receipt customer must match its invoice customer.');
+    if (String(invoice.customerId) !== String(input.customerId)) throw new VmosValidationError_('Receipt customer must match its invoice customer.');
     var now = self.now(), actor = self.auditUser();
     return self.repository.insert({
       id: self.idGenerator(self.repository), receiptCommandId: input.receiptCommandId, invoiceId: input.invoiceId, customerId: input.customerId,
@@ -34,7 +34,7 @@ CashReceiptService.prototype.recordReceipt = function (input) {
   });
 };
 
-CashReceiptService.prototype.depositReceipt = function (receiptId, input) {
+CashReceiptService_.prototype.depositReceipt = function (receiptId, input) {
   var self = this; input = input || {};
   requireCashReceipt_(receiptId, 'Receipt ID');
   requireCashReceipt_(input.depositCommandId, 'Deposit command ID');
@@ -44,7 +44,7 @@ CashReceiptService.prototype.depositReceipt = function (receiptId, input) {
   return withCashReceiptLock_(function () {
     var receipt = self.repository.findById(receiptId);
     if (String(receipt.depositCommandId || '') === String(input.depositCommandId)) return receipt;
-    if (String(receipt.depositStatus || '').toUpperCase() !== 'UNDEPOSITED') throw new VmosValidationError('Only an undeposited receipt can be marked deposited.');
+    if (String(receipt.depositStatus || '').toUpperCase() !== 'UNDEPOSITED') throw new VmosValidationError_('Only an undeposited receipt can be marked deposited.');
     return self.repository.updateById(receiptId, {
       depositStatus: 'DEPOSITED', depositDate: input.depositDate, depositReference: input.depositReference,
       depositCommandId: input.depositCommandId, updatedAt: self.now(), updatedBy: self.auditUser()
@@ -52,7 +52,7 @@ CashReceiptService.prototype.depositReceipt = function (receiptId, input) {
   });
 };
 
-CashReceiptService.prototype.getUndepositedExceptionSummary = function (asOf) {
+CashReceiptService_.prototype.getUndepositedExceptionSummary = function (asOf) {
   var today = cashReceiptDate_(asOf || this.now()), invalidAmountCount = 0, invalidDateCount = 0, total = 0, oldestDays = null;
   var undeposited = this.repository.list().filter(function (receipt) { return String(receipt.depositStatus || '').toUpperCase() === 'UNDEPOSITED'; });
   undeposited.forEach(function (receipt) {
@@ -66,9 +66,9 @@ CashReceiptService.prototype.getUndepositedExceptionSummary = function (asOf) {
   return serializeVmosValue_({ count: undeposited.length, total: total, oldestDays: oldestDays, invalidAmountCount: invalidAmountCount, invalidDateCount: invalidDateCount });
 };
 
-function requireCashReceipt_(value, label) { if (value === undefined || value === null || String(value).trim() === '') throw new VmosValidationError(label + ' is required.'); }
-function validateCashAmount_(value) { if (value === undefined || value === null || value === '' || isNaN(Number(value)) || Number(value) <= 0) throw new VmosValidationError('Receipt amount must be greater than zero.'); }
-function validateCashDate_(value, label) { if (!cashReceiptDate_(value)) throw new VmosValidationError(label + ' must be a valid date.'); }
+function requireCashReceipt_(value, label) { if (value === undefined || value === null || String(value).trim() === '') throw new VmosValidationError_(label + ' is required.'); }
+function validateCashAmount_(value) { if (value === undefined || value === null || value === '' || isNaN(Number(value)) || Number(value) <= 0) throw new VmosValidationError_('Receipt amount must be greater than zero.'); }
+function validateCashDate_(value, label) { if (!cashReceiptDate_(value)) throw new VmosValidationError_(label + ' must be a valid date.'); }
 function cashReceiptDate_(value) {
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
   // Date-only receipt fields are business-calendar dates, not midnight UTC.
@@ -84,6 +84,6 @@ function generateCashReceiptIdUnderLock_(repository) {
     var sequence = parseVmosSequence_(receipt.id, 'RCPT', year);
     return sequence === null ? maximum : Math.max(maximum, sequence);
   }, 0);
-  if (highest >= 9999) throw new VmosValidationError('ID sequence for RCPT-' + year + ' has reached its 4-digit limit.');
+  if (highest >= 9999) throw new VmosValidationError_('ID sequence for RCPT-' + year + ' has reached its 4-digit limit.');
   return 'RCPT-' + year + '-' + ('0000' + (highest + 1)).slice(-4);
 }

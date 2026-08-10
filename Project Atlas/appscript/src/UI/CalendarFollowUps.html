@@ -47,7 +47,7 @@ function note(text,type){var el=document.getElementById('toast');el.textContent=
 function messageOf(value){return value&&value.error&&value.error.message||value&&value.message||'That action could not be completed.';}
 function run(name,args,ok,fail){
   google.script.run.withSuccessHandler(function(response){
-    if(!response||!response.ok){if(fail)fail(messageOf(response),false);else note(messageOf(response),'error');return;}
+      if(!response||!response.ok){if(fail)fail(messageOf(response),false);else note(messageOf(response),'error');if(response&&response.refreshRequired)setTimeout(load,0);return;}
     ok(response.data);
   }).withFailureHandler(function(error){
     var safeMessage='The result could not be confirmed. Refresh before retrying.';

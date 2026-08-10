@@ -1,36 +1,36 @@
 /** Repository wrappers for append-only job events and opaque QR tokens. */
 function createOperationalRepository_(entityName, mapping) {
   var config = getShopOperationalConfig_();
-  return new SheetsRepository(entityName, mapping, SpreadsheetApp.openById(config.spreadsheetId));
+  return new SheetsRepository_(entityName, mapping, SpreadsheetApp.openById(config.spreadsheetId));
 }
 
-function JobEventRepository() {
+function JobEventRepository_() {
   this.repository = createOperationalRepository_('JobEvent', getShopOperationalConfig_().eventMapping);
 }
-JobEventRepository.prototype.list = function () { return this.repository.list(); };
-JobEventRepository.prototype.findById = function (eventId) { return this.repository.findById(eventId); };
-JobEventRepository.prototype.append = function (event) {
-  if (!event || !event.id) throw new VmosValidationError('Job event ID is required.');
+JobEventRepository_.prototype.list = function () { return this.repository.list(); };
+JobEventRepository_.prototype.findById = function (eventId) { return this.repository.findById(eventId); };
+JobEventRepository_.prototype.append = function (event) {
+  if (!event || !event.id) throw new VmosValidationError_('Job event ID is required.');
   return this.repository.insert(event);
 };
-JobEventRepository.prototype.listByJobId = function (jobId) {
+JobEventRepository_.prototype.listByJobId = function (jobId) {
   return this.list().filter(function (event) { return String(event.jobId) === String(jobId); });
 };
 
-function JobQrTokenRepository() {
+function JobQrTokenRepository_() {
   this.repository = createOperationalRepository_('JobQrToken', getShopOperationalConfig_().qrMapping);
 }
-JobQrTokenRepository.prototype.list = function () { return this.repository.list(); };
-JobQrTokenRepository.prototype.findByToken = function (token) { return this.repository.findById(token); };
-JobQrTokenRepository.prototype.create = function (record) {
-  if (!record || !record.id) throw new VmosValidationError('QR token is required.');
-  if (!record.jobId) throw new VmosValidationError('Job ID is required for a QR token.');
+JobQrTokenRepository_.prototype.list = function () { return this.repository.list(); };
+JobQrTokenRepository_.prototype.findByToken = function (token) { return this.repository.findById(token); };
+JobQrTokenRepository_.prototype.create = function (record) {
+  if (!record || !record.id) throw new VmosValidationError_('QR token is required.');
+  if (!record.jobId) throw new VmosValidationError_('Job ID is required for a QR token.');
   return this.repository.insert(record);
 };
-JobQrTokenRepository.prototype.revoke = function (token, actor) {
+JobQrTokenRepository_.prototype.revoke = function (token, actor) {
   return this.repository.updateById(token, { revokedAt: new Date(), revokedBy: actor });
 };
-JobQrTokenRepository.prototype.findActiveByJobId = function (jobId) {
+JobQrTokenRepository_.prototype.findActiveByJobId = function (jobId) {
   return this.list().filter(function (record) {
     return String(record.jobId) === String(jobId) && !record.revokedAt;
   });

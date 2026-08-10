@@ -20,13 +20,14 @@ assert.match(code,/caps\.indexOf\(getMvpEntityCapability_\(entity,'read'\)\)/);
 // Attack the generic endpoint: Customer permission cannot be replayed against restricted domains.
 let allowed=['CORE_RECORD_WRITE'],lastCapability='';
 const endpointContext=vm.createContext({console,Object,Array,String,Date,JSON,Error,
+  Utilities:{DigestAlgorithm:{SHA_256:'SHA_256'},Charset:{UTF_8:'UTF_8'},computeDigest:()=>[1,2,3]},
   enforceAbuseControl_:()=>{},
   authorizedExecute_:(cap,name,operation)=>{lastCapability=cap;if(!allowed.includes(cap))throw Object.assign(new Error('denied'),{code:'AUTHORIZATION_ERROR'});return operation({userId:'U1',capabilities:allowed});},
   toClientError_:error=>({ok:false,error:{code:error.code}}),
-  VmosValidationError:function(message){this.message=message;this.code='VALIDATION_ERROR';},
-  VmosAuthorizationError:function(message){this.message=message;this.code='AUTHORIZATION_ERROR';},
-  MvpService:function(entity){this.create=input=>({entity,input});this.update=(id,changes)=>({entity,id,changes});this.list=()=>[entity];},
-  MvpLifecycleService:function(){},HtmlService:{},LockService:{getScriptLock:()=>({})}
+  VmosValidationError_:function(message){this.message=message;this.code='VALIDATION_ERROR';},
+  VmosAuthorizationError_:function(message){this.message=message;this.code='AUTHORIZATION_ERROR';},
+  MvpService_:function(entity){this.create=input=>({entity,input});this.update=(id,changes)=>({entity,id,changes});this.list=()=>[entity];},
+  MvpLifecycleService_:function(){},HtmlService:{},LockService:{getScriptLock:()=>({})}
 });
 vm.runInContext(registry,endpointContext);vm.runInContext(code,endpointContext);
 assert.equal(endpointContext.createMvpRecord('Customer',{name:'ok'}).ok,true);
@@ -43,7 +44,7 @@ allowed=['CORE_RECORD_READ'];const bootstrap=endpointContext.getMvpBootstrap();a
 });
 
 // Every UI callable is classified; any other direct sheet-creating public function is rejected.
-const uiNames=Array.from(code.matchAll(/^function\s+([A-Za-z0-9_]+)\(/gm)).map(x=>x[1]).filter(x=>!['callable_'].includes(x));
+const uiNames=Array.from(code.matchAll(/^function\s+([A-Za-z0-9_]+)\(/gm)).map(x=>x[1]).filter(x=>!x.endsWith('_'));
 uiNames.forEach(name=>assert.match(registry,new RegExp('(?:^|\\s)'+name+':\\{kind:')));
 function walk(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):e.name.endsWith('.gs')?[path.join(dir,e.name)]:[]);}
 walk(root).forEach(file=>{
@@ -55,16 +56,16 @@ walk(root).forEach(file=>{
 });
 
 // A durable PENDING audit record exists before mutation. Post-commit audit failure yields recovery state.
-const context=vm.createContext({console,Date,Object,Array,String,JSON,Error,Utilities:{getUuid:()=> 'uuid'},VmosError:function(message,code){this.message=message;this.code=code;},SecurityAuditEventRepository:function(){}});
-context.VmosError.prototype=Object.create(Error.prototype);
+const context=vm.createContext({console,Date,Object,Array,String,JSON,Error,Utilities:{getUuid:()=> 'uuid'},VmosError_:function(message,code){this.message=message;this.code=code;},SecurityAuditEventRepository_:function(){}});
+context.VmosError_.prototype=Object.create(Error.prototype);
 vm.runInContext(read('Services/IdentityAuthorizationService.gs'),context);
 let records=[],updates=[],mutated=false;
-const audit=new context.SecurityAuditService({repository:{create:r=>{records.push({...r});return r;},update:(id,c)=>{updates.push({id,c});throw new Error('audit unavailable');}},clock:()=>new Date('2026-08-10T00:00:00Z'),uuid:()=> '1'});
+const audit=new context.SecurityAuditService_({repository:{findByOperationIdentity:()=>null,create:r=>{records.push({...r});return r;},update:(id,c)=>{updates.push({id,c});if(c.status==='IN_PROGRESS')return c;throw new Error('audit unavailable');}},clock:()=>new Date('2026-08-10T00:00:00Z'),uuid:()=> '1'});
 const ctx={tenantId:'T1',userId:'U1',principalType:'TEST',principalSubject:'subject',operation:'mutate',correlationId:'CORR',actorType:'USER',occurredAt:new Date('2026-08-10T00:00:00Z')};
 const result=audit.execute(ctx,'CORE_RECORD_WRITE',()=>{mutated=true;return {id:'R1'};});
 assert.equal(records[0].status,'PENDING');assert.equal(records[0].correlationId,'CORR');assert.equal(records[0].principalSubject,'subject');assert.equal(mutated,true);assert.equal(result.auditStatus,'RECOVERY_REQUIRED');
 let uncertainRecords=[];
-const failing=new context.SecurityAuditService({repository:{create:r=>uncertainRecords.push({...r}),update:()=>{}},uuid:()=> '2'});
+const failing=new context.SecurityAuditService_({repository:{findByOperationIdentity:()=>null,create:r=>uncertainRecords.push({...r}),update:()=>{}},uuid:()=> '2'});
 assert.throws(()=>failing.execute(ctx,'CORE_RECORD_WRITE',()=>{throw new Error('after-write uncertainty');}),e=>e.code==='UNKNOWN_OUTCOME');
 
 // The operator calendar payload exposes display/state fields, never provider credentials/cursors/IDs.

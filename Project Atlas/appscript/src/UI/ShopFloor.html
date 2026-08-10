@@ -29,7 +29,7 @@
     function humanDate(value){if(!value)return '—';var date=new Date(value);return isNaN(date.getTime())?String(value):date.toLocaleString();}
     function money(value){if(value===undefined||value===null||value==='')return 'Not available';var amount=Number(value);return isNaN(amount)?String(value):amount.toLocaleString(undefined,{style:'currency',currency:'USD'});}
     function commandId(){if(window.crypto&&window.crypto.randomUUID)return window.crypto.randomUUID();return 'shop-'+Date.now()+'-'+Math.random().toString(36).slice(2);}
-    function payload(result){if(result&&result.ok===false)throw new Error((result.error&&result.error.message)||'The request could not be completed.');return result&&Object.prototype.hasOwnProperty.call(result,'data')?result.data:result;}
+    function payload(result){if(result&&result.ok===false){if(result.refreshRequired&&shopState.job)setTimeout(function(){refreshJob(shopState.job.id||shopState.job.jobId);},0);throw new Error((result.error&&result.error.message)||'The request could not be completed.');}return result&&Object.prototype.hasOwnProperty.call(result,'data')?result.data:result;}
     function showMessage(kind,text){var element=document.getElementById('message');element.className='message '+kind;element.textContent=text;element.hidden=false;clearTimeout(showMessage.timer);showMessage.timer=setTimeout(function(){element.hidden=true;},5000);}
     function setBusy(key,isBusy){shopState.busy[key]=isBusy;render();}
     function isBusy(key){return !!shopState.busy[key];}

@@ -43,6 +43,7 @@ const context = vm.createContext({
   Utilities: { getUuid: () => 'a1b2c3d4-e5f6-47a8-9012-3456789abcde' },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) },
   SpreadsheetApp: { openById: () => spreadsheet },
+  securityOperationOptions_: () => ({}),
   callable_: (name, policy, operation) => operation({ userId: 'ADMIN-TEST' })
 });
 
@@ -67,11 +68,11 @@ assert.throws(() => context.initializeShopOperationalPersistence(), /No changes 
 assert.equal(sheets.JobEvents.rows[0][0], 'Wrong Event ID');
 sheets.JobEvents.rows[0] = context.VMOS_DEFAULT_OPERATIONAL_MAPPING.eventMapping.headers.slice();
 
-const events = new context.JobEventRepository();
+const events = new context.JobEventRepository_();
 events.append({ id: 'JEV-26-0001', commandId: 'cmd-001', jobId: 'JOB-26-0127', eventType: 'STATUS_CHANGED', occurredAt: new Date('2026-08-07T01:14:00.000Z'), actor: 'Josh' });
 assert.deepEqual(events.listByJobId('JOB-26-0127'), [{ id: 'JEV-26-0001', commandId: 'cmd-001', jobId: 'JOB-26-0127', eventType: 'STATUS_CHANGED', occurredAt: '2026-08-07T01:14:00.000Z', actor: 'Josh', previousStatus: '', newStatus: '', notes: '', problemType: '', responsibleParty: '', nextAction: '', expectedResolution: '', machine: '', tool: '', program: '', workflowId: '', workflowVersion: '' }]);
 
-const tokens = new context.JobQrTokenRepository();
+const tokens = new context.JobQrTokenRepository_();
 tokens.create({ id: context.generateOpaqueJobQrToken_(), jobId: 'JOB-26-0127', workflowId: 'MACHINING', createdAt: new Date('2026-08-07T01:14:00.000Z'), createdBy: 'Josh' });
 assert.equal(tokens.findActiveByJobId('JOB-26-0127').length, 1);
 assert.match(tokens.findActiveByJobId('JOB-26-0127')[0].id, /^[a-f0-9]{32}$/);

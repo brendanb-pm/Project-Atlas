@@ -1,5 +1,5 @@
-function CustomerRepository() { return createRepository_('Customer'); }
-function RFQRepository() { return createRepository_('RFQ'); }
-function QuoteRepository() { return createRepository_('Quote'); }
-function JobRepository() { return createRepository_('Job'); }
-function InvoiceRepository() { return createRepository_('Invoice'); }
+function CustomerRepository_() { return createRepository_('Customer'); }
+function RFQRepository_() { return createRepository_('RFQ'); }
+function QuoteRepository_() { return createRepository_('Quote'); }
+function JobRepository_() { return createRepository_('Job'); }
+function InvoiceRepository_() { return createRepository_('Invoice'); }

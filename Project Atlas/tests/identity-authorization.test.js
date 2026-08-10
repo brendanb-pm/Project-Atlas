@@ -9,7 +9,7 @@ const context=vm.createContext({console,Date,JSON,String,Number,Math,Object,Arra
 function fixture(overrides={}){
   const principal=overrides.principal===undefined?{type:'GOOGLE_WORKSPACE',subject:'operator@example.com',verified:true}:overrides.principal;
   const membership=overrides.membership===undefined?{id:'M-1',tenantId:'TENANT-A',userId:'USR-1',status:'ACTIVE',roles:'["SALES"]',capabilities:'[]'}:overrides.membership;
-  return new context.AtlasAuthorizationService({
+  return new context.AtlasAuthorizationService_({
     config:{mode:overrides.mode||'ENFORCED',tenantId:overrides.tenantId===undefined?'TENANT-A':overrides.tenantId},
     principals:{resolve(){if(principal instanceof Error)throw principal;return principal;}},
     identities:{findActive(provider,subject){return provider==='GOOGLE_WORKSPACE'&&subject==='operator@example.com'?{userId:'USR-1'}:undefined;}},
@@ -23,17 +23,17 @@ let received;
 assert.equal(fixture().execute('SALES_WRITE','createSalesActivity',ctx=>{received=ctx;return 'ok';}),'ok');
 assert.equal(received.userId,'USR-1'); assert.equal(received.tenantId,'TENANT-A'); assert.equal(received.authoritative,true); assert.equal(Object.isFrozen(received),true);
 assert.throws(()=>fixture({principal:null}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
-assert.throws(()=>fixture({principal:new context.VmosAuthorizationError()}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
+assert.throws(()=>fixture({principal:new context.VmosAuthorizationError_()}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({tenantId:''}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({user:{id:'USR-1',status:'INACTIVE'}}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({membership:null}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture().execute('FINANCE_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({membership:{id:'M-X',tenantId:'TENANT-B',userId:'USR-1',status:'ACTIVE',roles:'["ADMIN"]'}}).execute('CORE_RECORD_READ','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
-assert.throws(()=>fixture({entitlements:{assertAllowed(){throw new context.VmosAuthorizationError();}}}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
+assert.throws(()=>fixture({entitlements:{assertAllowed(){throw new context.VmosAuthorizationError_();}}}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 const repositoryFailure=fixture(); repositoryFailure.users={get(){throw new Error('sheet detail');}};
 assert.throws(()=>repositoryFailure.execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR'&&!/sheet detail/.test(e.message));
 
-const resolver=new context.GoogleAppsScriptPrincipalResolver({session:{getActiveUser:()=>({getEmail:()=>''}),getEffectiveUser:()=>({getEmail:()=> 'deployer@example.com'})}});
+const resolver=new context.GoogleAppsScriptPrincipalResolver_({session:{getActiveUser:()=>({getEmail:()=>''}),getEffectiveUser:()=>({getEmail:()=> 'deployer@example.com'})}});
 assert.throws(()=>resolver.resolve(),e=>e.code==='AUTHORIZATION_ERROR','EffectiveUser must never impersonate the operator.');
 const finance=fixture({membership:{id:'M-2',tenantId:'TENANT-A',userId:'USR-1',status:'ACTIVE',roles:'["FINANCE"]'}});
 assert.equal(finance.execute('FINANCE_WRITE','recordCashReceipt',()=>true),true);
@@ -52,7 +52,7 @@ assert.ok(context.ATLAS_DEFAULT_ROLE_CAPABILITIES.ADMIN.includes('ADMIN_IDENTITY
 assert.throws(()=>context.createTrustedSystemAuditContext_('CALENDAR_RECONCILIATION','ADMIN_IDENTITY'),e=>e.code==='AUTHORIZATION_ERROR');
 assert.equal(context.ATLAS_IDENTITY_MAPPINGS.AtlasUser.sheetName,'AtlasUsers');
 assert.deepEqual(Array.from(context.ATLAS_IDENTITY_MAPPINGS.TenantMembership.fields.roles),['Roles JSON']);
-const duplicateIdentities=Object.create(context.ExternalIdentityReferenceRepository.prototype);
+const duplicateIdentities=Object.create(context.ExternalIdentityReferenceRepository_.prototype);
 duplicateIdentities.list=()=>[{provider:'GOOGLE_WORKSPACE',subject:'operator@example.com',status:'ACTIVE'},{provider:'GOOGLE_WORKSPACE',subject:'operator@example.com',status:'ACTIVE'}];
 assert.throws(()=>duplicateIdentities.findActive('GOOGLE_WORKSPACE','operator@example.com'),e=>e.code==='AUTHORIZATION_ERROR');
 

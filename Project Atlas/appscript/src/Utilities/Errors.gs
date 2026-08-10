@@ -1,13 +1,13 @@
-function VmosError(message, code) { this.name = 'VmosError'; this.message = message; this.code = code || 'VMOS_ERROR'; }
-VmosError.prototype = Object.create(Error.prototype);
-function VmosValidationError(message) { VmosError.call(this, message, 'VALIDATION_ERROR'); this.name = 'VmosValidationError'; }
-VmosValidationError.prototype = Object.create(VmosError.prototype);
-function VmosConfigurationError(message) { VmosError.call(this, message, 'CONFIGURATION_ERROR'); this.name = 'VmosConfigurationError'; }
-VmosConfigurationError.prototype = Object.create(VmosError.prototype);
-function VmosNotFoundError(message) { VmosError.call(this, message, 'NOT_FOUND'); this.name = 'VmosNotFoundError'; }
-VmosNotFoundError.prototype = Object.create(VmosError.prototype);
-function VmosThrottleError(message, retryAfterSeconds) { VmosError.call(this, message, 'THROTTLED'); this.name = 'VmosThrottleError'; this.retryAfterSeconds = retryAfterSeconds || 1; }
-VmosThrottleError.prototype = Object.create(VmosError.prototype);
+function VmosError_(message, code) { this.name = 'VmosError_'; this.message = message; this.code = code || 'VMOS_ERROR'; }
+VmosError_.prototype = Object.create(Error.prototype);
+function VmosValidationError_(message) { VmosError_.call(this, message, 'VALIDATION_ERROR'); this.name = 'VmosValidationError_'; }
+VmosValidationError_.prototype = Object.create(VmosError_.prototype);
+function VmosConfigurationError_(message) { VmosError_.call(this, message, 'CONFIGURATION_ERROR'); this.name = 'VmosConfigurationError_'; }
+VmosConfigurationError_.prototype = Object.create(VmosError_.prototype);
+function VmosNotFoundError_(message) { VmosError_.call(this, message, 'NOT_FOUND'); this.name = 'VmosNotFoundError_'; }
+VmosNotFoundError_.prototype = Object.create(VmosError_.prototype);
+function VmosThrottleError_(message, retryAfterSeconds) { VmosError_.call(this, message, 'THROTTLED'); this.name = 'VmosThrottleError_'; this.retryAfterSeconds = retryAfterSeconds || 1; }
+VmosThrottleError_.prototype = Object.create(VmosError_.prototype);
 
 function clientErrorReference_() {
   try { return 'ERR-' + Utilities.getUuid().replace(/-/g, '').slice(0, 12).toUpperCase(); }
@@ -39,7 +39,8 @@ function safeClientError_(error, referenceId) {
     CONFIGURATION_UNAVAILABLE: 'This feature is not configured.',
     PROVIDER_UNAVAILABLE: 'The connected service is temporarily unavailable.',
     THROTTLED: error && error.message || 'Too many requests. Wait briefly, then try again.',
-    UNKNOWN_OUTCOME: 'The result could not be confirmed. Refresh the record before trying again.'
+    UNKNOWN_OUTCOME: 'The result could not be confirmed. Refresh the record before trying again.',
+    OPERATION_IN_PROGRESS: 'This request is already being processed. Refresh shortly to confirm the result.'
   };
   var publicCode = code === 'CONFIGURATION_ERROR' ? 'CONFIGURATION_UNAVAILABLE' : (messages[code] ? code : 'INTERNAL_ERROR');
   var response = { code: publicCode, message: messages[code] || 'Your request could not be completed.', referenceId: referenceId };

@@ -12,14 +12,14 @@ const context = vm.createContext({
 context.getVmosAuditUser_ = () => 'operator@example.com';
 const ideas = [], events = [];
 const ideasRepository = {
-  list: () => ideas.slice(), findById: (id) => { const idea = ideas.find((item) => item.id === id); if (!idea) throw new context.VmosNotFoundError('missing'); return idea; },
+  list: () => ideas.slice(), findById: (id) => { const idea = ideas.find((item) => item.id === id); if (!idea) throw new context.VmosNotFoundError_('missing'); return idea; },
   append: (idea) => { ideas.push({ ...idea }); return idea; }
 };
 const eventsRepository = {
   listByIdeaId: (id) => events.filter((event) => event.ideaId === id),
   append: (event) => { events.push({ ...event }); return event; }
 };
-const service = new context.IdeasService(ideasRepository, eventsRepository);
+const service = new context.IdeasService_(ideasRepository, eventsRepository);
 const idea = service.capture({ title: 'Swiss lathe', category: 'Equipment', description: 'Research future capacity.' });
 assert.match(idea.id, /^IDEA-/);
 assert.equal(idea.state, 'IDEA');
