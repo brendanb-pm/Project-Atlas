@@ -1,6 +1,16 @@
 function SheetsRepository(entityName, definition, spreadsheet) {
   this.entityName = entityName; this.definition = definition; this.spreadsheet = spreadsheet;
 }
+/**
+ * Sheets interprets leading formula characters when strings are written. An
+ * apostrophe is the Sheets literal-text marker: it is not shown to operators
+ * and getValues() returns the original visible string, so updates do not
+ * accumulate escaping. Numbers, booleans, and Dates retain their native type.
+ */
+function toSafeSheetsCellValue_(value) {
+  if (typeof value === 'string' && /^[\t\r\n ]*[=+\-@]/.test(value)) return "'" + value;
+  return value;
+}
 SheetsRepository.prototype.getSheet_ = function () {
   var sheet = this.spreadsheet.getSheetByName(this.definition.sheetName);
   if (!sheet) throw new VmosConfigurationError('Sheet "' + this.definition.sheetName + '" for ' + this.entityName + ' does not exist. No sheet was created.');
@@ -60,14 +70,14 @@ SheetsRepository.prototype.findRowById_ = function (id) {
 SheetsRepository.prototype.insert = function (data) {
   var sheet = this.getSheet_(), mapping = this.headerMap_(); this.assertWritable_(data, mapping);
   var row = new Array(sheet.getLastColumn()).fill('');
-  Object.keys(data).forEach(function (logical) { row[mapping[logical].column - 1] = data[logical]; });
+  Object.keys(data).forEach(function (logical) { row[mapping[logical].column - 1] = toSafeSheetsCellValue_(data[logical]); });
   sheet.appendRow(row); return this.findById(data.id);
 };
 SheetsRepository.prototype.updateById = function (id, changes) {
   if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError('Primary key cannot be changed.');
   var located = this.findRowById_(id); this.assertWritable_(changes, located.mapping);
   Object.keys(changes).forEach(function (logical) {
-    located.sheet.getRange(located.rowNumber, located.mapping[logical].column).setValue(changes[logical]);
+    located.sheet.getRange(located.rowNumber, located.mapping[logical].column).setValue(toSafeSheetsCellValue_(changes[logical]));
   });
   return this.findById(id);
 };

@@ -50,7 +50,8 @@ function run(name,args,ok,fail){
     if(!response||!response.ok){if(fail)fail(messageOf(response),false);else note(messageOf(response),'error');return;}
     ok(response.data);
   }).withFailureHandler(function(error){
-    if(fail)fail(messageOf(error),true);else note('The result could not be confirmed. Refresh before retrying.','error');
+    var safeMessage='The result could not be confirmed. Refresh before retrying.';
+    if(fail)fail(safeMessage,true);else note(safeMessage,'error');
   })[name].apply(google.script.run,args||[]);
 }
 function load(preserveEditor){

@@ -34,7 +34,7 @@
       if(travelerState.busy)return;travelerState.busy=true;
       document.getElementById('traveler').innerHTML='<section class="loading">Loading traveler…</section>';
       if(!travelerState.token){renderError('No traveler identifier was supplied.');travelerState.busy=false;return;}
-      google.script.run.withSuccessHandler(function(result){travelerState.busy=false;try{renderTraveler(responseData(result));}catch(error){renderError(error.message);}}).withFailureHandler(function(error){travelerState.busy=false;renderError((error&&error.message)||String(error)||'Unable to load traveler.');}).getTravelerPrintData(travelerState.token);
+      google.script.run.withSuccessHandler(function(result){travelerState.busy=false;try{renderTraveler(responseData(result));}catch(error){renderError(error.message);}}).withFailureHandler(function(){travelerState.busy=false;renderError('Unable to load traveler. Try again.');}).getTravelerPrintData(travelerState.token);
     }
     function start(){
       var fallback=new URLSearchParams(window.location.search).get('traveler')||new URLSearchParams(window.location.search).get('qr');
