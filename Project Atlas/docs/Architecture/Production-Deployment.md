@@ -23,6 +23,8 @@ The configured mapping accepts the exact header strings above: no column positio
 
 `appscript/src` is the only clasp deployment root. The Apps Script manifest is at `appscript/src/appsscript.json`; all `.gs` and `.html` source remains beneath that root. This prevents repository-relative paths such as `src/UI/Code.gs` from being deployed as Apps Script filenames.
 
+Security gate: follow `MOS-121C-Deployment-Security-Profiles-and-Enforcement-Plan.md`. The current `USER_DEPLOYING` + `ANYONE` manifest is not an approved profile for writable production operation until verified authentication, active VMOS membership, capability authorization, and authoritative audit context are implemented and validated. This document does not authorize changing deployment access.
+
 From the repository's `Project Atlas/appscript` directory:
 
 1. Copy `.clasp.json.example` to `.clasp.json` and replace only `REPLACE_WITH_YOUR_EXISTING_APPS_SCRIPT_ID` with the ID of the existing production Apps Script project. `.clasp.json` is ignored by Git and must never be committed.

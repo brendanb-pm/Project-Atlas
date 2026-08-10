@@ -26,7 +26,7 @@ The supplied production headers are mapped in `appscript/src/Config.gs`. Do not 
 2. In **Project Settings → Script properties**, set `VMOS_SPREADSHEET_ID` to the existing workbook ID.
 3. Compare its real sheet names and row-1 headers with `appscript/src/Config.gs`. If they differ, stop and set `VMOS_SHEET_MAPPING` to a JSON mapping using the same shape; never change the workbook.
 4. Share the workbook with the account that deploys the script. Run `getMvpBootstrap` once from the editor to authorize access.
-5. Deploy → New deployment → Web app. Execute as the deploying user; choose access appropriate for your shop. Open the deployment URL.
+5. Deployment access is governed by `docs/Architecture/MOS-121C-Deployment-Security-Profiles-and-Enforcement-Plan.md`. The current `USER_DEPLOYING` + `ANYONE` manifest is not approved for writable production use until verified authentication, active tenant membership, capability authorization, and authoritative audit context are implemented and validated. Do not broaden or change deployment access without a separately approved activation story.
 
 The default mapping expects existing sheets named `Customers`, `RFQ's`, `Quotes`, `Jobs`, and `Invoices`, with the exact headers listed in `Config.gs`. Missing sheet/header errors block a write and say what to map.
 
