@@ -18,7 +18,7 @@ function AtlasNavigationService_(dependencies){dependencies=dependencies||{};thi
 AtlasNavigationService_.prototype.getModel=function(context,currentRoute){
   var capabilities=(context&&context.capabilities)||[],routes=this.registry.filter(function(route){return !route.capabilities.length||route.capabilities.some(function(capability){return capabilities.indexOf(capability)!==-1;});});
   var groups=ATLAS_ROUTE_GROUPS.map(function(group){return {id:group,label:group,items:routes.filter(function(route){return route.group===group;}).map(atlasNavigationRoute_)};}).filter(function(group){return group.items.length;});
-  return {profile:this.profile,currentRoute:normalizeAtlasRoute_(currentRoute),groups:groups,shortcuts:routes.filter(function(route){return ['sales-activity','follow-ups','jobs','shop-floor','operations-dashboard'].indexOf(route.id)!==-1;}).map(atlasNavigationRoute_),enabledModules:this.profile.enabledModules.slice()};
+  return {profile:this.profile,currentRoute:normalizeAtlasRoute_(currentRoute),groups:groups,shortcuts:routes.filter(function(route){return ['sales-activity','follow-ups','jobs','shop-floor','operations-dashboard'].indexOf(route.id)!==-1;}).map(atlasNavigationRoute_),enabledModules:this.profile.enabledModules.slice(),accessState:capabilities.length?'READY':'LIMITED_ACCESS'};
 };
 function atlasNavigationRoute_(route){return {id:route.id,label:route.label,description:route.description,href:route.href};}
 function normalizeAtlasRoute_(value){var route=String(value||'home').trim().toLowerCase();return ATLAS_LEGACY_ROUTE_ALIASES[route]||route||'home';}

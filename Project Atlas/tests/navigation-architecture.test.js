@@ -36,6 +36,14 @@ const operatorIds=Array.from(operator.groups).flatMap(group=>Array.from(group.it
 assert(operatorIds.includes('jobs')&&operatorIds.includes('shop-floor')&&operatorIds.includes('operations-dashboard'));
 assert(!operatorIds.includes('customers'));
 
+const admin=service.getModel({capabilities:['CORE_RECORD_READ','SALES_READ','FOLLOWUP_READ','RFQ_READ','OPERATIONS_READ','FINANCE_READ','ADMIN_CONFIG']},'home');
+const adminIds=Array.from(admin.groups).flatMap(group=>Array.from(group.items).map(item=>item.id));
+['customers','sales-activity','follow-ups','rfqs','quotes','jobs','shop-floor','operations-dashboard','invoices','ideas'].forEach(id=>assert(adminIds.includes(id),'authorized Owner/Admin navigation includes '+id));
+assert.equal(admin.accessState,'READY');
+const noCapabilities=service.getModel({capabilities:[]},'home');
+assert.deepEqual(Array.from(noCapabilities.groups).flatMap(group=>Array.from(group.items).map(item=>item.id)),['home']);
+assert.equal(noCapabilities.accessState,'LIMITED_ACCESS','empty trusted capability context is explained, not elevated');
+
 assert.equal(context.resolveAtlasRoute_({parameter:{sales:'1'}}),'sales-activity');
 assert.equal(context.resolveAtlasRoute_({parameter:{calendar:'1'}}),'follow-ups');
 assert.equal(context.resolveAtlasRoute_({parameter:{route:'jobs'}}),'jobs');

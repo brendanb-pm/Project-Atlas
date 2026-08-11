@@ -1,6 +1,7 @@
 /** Machine-verifiable classification for every callable operation in UI/Code.gs. */
 var ATLAS_CALLABLE_ENDPOINTS = {
   getAtlasNavigation:{kind:'READ',capability:null},
+  getCommandCenterWorkspace:{kind:'READ',capability:null},
   createSalesActivity:{kind:'WRITE',capability:'SALES_WRITE'}, updateSalesActivity:{kind:'WRITE',capability:'SALES_WRITE'},
   getSalesActivityTimeline:{kind:'READ',capability:'SALES_READ'}, getSalesFollowUpQueue:{kind:'READ',capability:'SALES_READ'},
   getSalesAccountHealth:{kind:'READ',capability:'SALES_READ'}, getSalesActivityMetrics:{kind:'READ',capability:'SALES_READ'},

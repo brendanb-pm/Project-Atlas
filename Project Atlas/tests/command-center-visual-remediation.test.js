@@ -15,7 +15,7 @@ assert.match(index,/row\.status/,'recent record context may include existing sta
 assert.match(index,/row\.dueDate/,'recent record context may include existing dates');
 assert.match(index,/row\.total/,'recent record context may include existing invoice totals');
 assert.doesNotMatch(index,/function commandCenter\(\).*surface metric/s,'Command Center no longer emits five sparse metric cards');
-assert.match(index,/Operational overview/,'page header establishes operational hierarchy');
+assert.match(index,/Daily workspace/,'page header evolves the operational hierarchy without regressing it');
 assert.match(index,/sidebar nav section\+section/,'navigation groups have deliberate rhythm');
 assert.match(index,/nav-button\.active/,'active navigation remains visible');
 assert.match(design,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/,'desktop metrics use one compact row');
