@@ -15,6 +15,7 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   updateMvpRecord:{kind:'WRITE',capability:'DYNAMIC_MVP'}, approveQuote:{kind:'HIGH_RISK_WRITE',capability:'QUOTE_APPROVE'},
   issueQuote:{kind:'HIGH_RISK_WRITE',capability:'QUOTE_ISSUE'}, configureShopFloorJob:{kind:'ADMINISTRATIVE',capability:'OPERATIONS_WRITE'},
   resolveShopJobByQr:{kind:'READ',capability:'OPERATIONS_READ'}, getShopFloorJob:{kind:'READ',capability:'OPERATIONS_READ'},
+  getShopFloorWorkspace:{kind:'READ',capability:'OPERATIONS_READ'},
   transitionShopFloorJob:{kind:'HIGH_RISK_WRITE',capability:'SHOP_FLOOR_OPERATE'}, reportJobProblem:{kind:'HIGH_RISK_WRITE',capability:'SHOP_FLOOR_OPERATE'},
   resolveJobBlock:{kind:'HIGH_RISK_WRITE',capability:'SHOP_FLOOR_OPERATE'}, listJobEvents:{kind:'READ',capability:'OPERATIONS_READ'},
   getTravelerPrintData:{kind:'READ',capability:'OPERATIONS_READ'}, getShopDashboard:{kind:'READ',capability:'OPERATIONS_READ'},

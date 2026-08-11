@@ -114,6 +114,20 @@ ShopFloorService_.prototype.listEvents = function (jobId) {
   return this.events.listByJobId(jobId).sort(function (left, right) { return String(right.occurredAt || '').localeCompare(String(left.occurredAt || '')); });
 };
 
+/** Bounded, QR-scoped operator read model. QR locates work; context identifies and authorizes the operator. */
+ShopFloorService_.prototype.getWorkspaceByQr = function (token, context, limit) {
+  var job=this.resolveByQr(token),maximum=Math.max(1,Math.min(Number(limit)||12,25)),allEvents=this.listEvents(job.id),events=allEvents.slice(0,maximum),capabilities=context&&context.capabilities||[],canOperate=capabilities.indexOf('SHOP_FLOOR_OPERATE')!==-1,blocked=String(job.status||'').toUpperCase()==='BLOCKED',complete=String(job.status||'').toUpperCase()==='COMPLETE',latestProblem=events.filter(function(event){return event.eventType==='STOP_PROBLEM'&&(!events.some(function(candidate){return candidate.eventType==='BLOCK_RESOLVED'&&String(candidate.occurredAt||'')>String(event.occurredAt||'');}));})[0],transitions=canOperate?job.allowedTransitions||[]:[],operatorLabel=context&&context.operatorDisplayName||'';
+  return serializeVmosValue_({
+    job:job,
+    operator:{label:context&&context.operatorDisplayName||'',authoritative:context&&context.authoritative===true,available:Boolean(context&&context.operatorDisplayName)},
+    assignment:{label:job.operator||'',isCurrentOperator:Boolean(job.operator&&context&&context.operatorDisplayName&&String(job.operator).toLowerCase()===String(context.operatorDisplayName).toLowerCase())},
+    actions:{canOperate:canOperate,primaryStatus:transitions[0]||'',canReportProblem:canOperate&&!complete,canResolveBlock:canOperate&&blocked,resolutionStatuses:blocked?(job.workflowStates||[]):[]},
+    block:blocked?{reason:latestProblem&&latestProblem.problemType||'',notes:latestProblem&&latestProblem.notes||'',responsibleParty:latestProblem&&latestProblem.responsibleParty?(String(latestProblem.responsibleParty)===String(context&&context.userId)&&operatorLabel?operatorLabel:'Recorded operator'):'',nextAction:latestProblem&&latestProblem.nextAction||''}:null,
+    recentEvents:events.map(function(event){return {id:event.id,eventType:event.eventType,occurredAt:event.occurredAt,actor:event.actor?(String(event.actor)===String(context&&context.userId)&&operatorLabel?operatorLabel:'Recorded operator'):'Atlas system',previousStatus:event.previousStatus,newStatus:event.newStatus,notes:event.notes,problemType:event.problemType,responsibleParty:event.responsibleParty?'Recorded operator':'',nextAction:event.nextAction,machine:event.machine,tool:event.tool,program:event.program};}),
+    eventLimit:maximum,hasMoreEvents:allEvents.length>maximum
+  });
+};
+
 ShopFloorService_.prototype.transition = function (jobId, targetStatus, commandId, notes, token) {
   var self = this;
   return this.withCommand_(jobId, commandId, token, function (job, qr) {

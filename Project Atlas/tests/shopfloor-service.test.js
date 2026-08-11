@@ -64,6 +64,18 @@ assert.equal(shop.resolveByQr(TOKEN_A).id, 'JOB-26-0127');
 assert.equal(events.length, 2, 'Repeated scans are read-only and must not append events.');
 assert.equal(shop.resolveByQr(TOKEN_A).id, 'JOB-26-0127');
 assert.equal(events.length, 2);
+const workspace=shop.getWorkspaceByQr(TOKEN_A,{userId:'authenticated-user-1',operatorDisplayName:'Taylor Operator',authoritative:true,capabilities:['OPERATIONS_READ','SHOP_FLOOR_OPERATE']},1);
+assert.equal(workspace.job.id,'JOB-26-0127');
+assert.equal(workspace.operator.label,'Taylor Operator');
+assert.equal(workspace.operator.authoritative,true);
+assert.equal(workspace.actions.primaryStatus,'RUNNING');
+assert.equal(workspace.recentEvents.length,1);
+assert.equal(workspace.recentEvents[0].actor,'Taylor Operator');
+assert.equal(workspace.hasMoreEvents,true);
+assert.equal(Object.prototype.hasOwnProperty.call(workspace,'qrToken'),false);
+const readOnlyWorkspace=shop.getWorkspaceByQr(TOKEN_A,{userId:'viewer',operatorDisplayName:'Read Only',authoritative:true,capabilities:['OPERATIONS_READ']},12);
+assert.equal(readOnlyWorkspace.actions.canOperate,false);
+assert.equal(readOnlyWorkspace.actions.primaryStatus,'');
 assert.throws(() => shop.resolveByQr('malformed'), /invalid or no longer available/);
 assert.throws(() => shop.resolveByQr('ffffffffffffffffffffffffffffffff'), /invalid or no longer available/);
 
@@ -83,6 +95,11 @@ assert.equal(events.filter((event) => event.commandId === 'cmd-running').length,
 shop.reportProblem('JOB-26-0127', { reason: 'TOOL_FAILURE', notes: 'Tool 3 failed.', responsibleParty: 'spoofed-user' }, 'cmd-problem', TOKEN_A);
 assert.equal(jobs['JOB-26-0127'].status, 'BLOCKED');
 assert.equal(events[events.length - 1].responsibleParty, 'authenticated-user-1', 'Client actor fields are not audit attribution.');
+const blockedWorkspace=shop.getWorkspaceByQr(TOKEN_A,{userId:'authenticated-user-1',operatorDisplayName:'Taylor Operator',authoritative:true,capabilities:['OPERATIONS_READ','SHOP_FLOOR_OPERATE']},12);
+assert.equal(blockedWorkspace.actions.primaryStatus,'','blocked Jobs suppress normal transitions');
+assert.equal(blockedWorkspace.actions.canResolveBlock,true);
+assert.equal(blockedWorkspace.block.reason,'TOOL_FAILURE');
+assert.equal(blockedWorkspace.block.responsibleParty,'Taylor Operator');
 shop.resolveBlock('JOB-26-0127', { nextStatus: 'INSPECTION', responsibleParty: 'spoofed-user' }, 'cmd-resolve', TOKEN_A);
 assert.equal(jobs['JOB-26-0127'].status, 'INSPECTION');
 
