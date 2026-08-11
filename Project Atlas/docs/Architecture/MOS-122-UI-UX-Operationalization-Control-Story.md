@@ -1,6 +1,6 @@
 # MOS-122 UI/UX Operationalization Control Story
 
-Release channel: **MAIN**  
+Release channel: **MAIN**
 Inspected baseline: `a3440672a6b848df7b8af93c668e85b54a6e9266`
 
 ## Purpose and boundary
