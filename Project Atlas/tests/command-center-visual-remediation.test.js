@@ -1,0 +1,27 @@
+const assert=require('assert'),fs=require('fs'),path=require('path');
+const root=path.join(__dirname,'..','appscript','src','UI');
+const index=fs.readFileSync(path.join(root,'Index.html'),'utf8');
+const design=fs.readFileSync(path.join(root,'AtlasDesignSystem.html'),'utf8');
+
+assert.match(index,/atlas-compact-metrics/,'Command Center uses compact metric strip');
+assert.match(index,/atlas-compact-metric__value/,'metric value hierarchy is explicit');
+assert.match(index,/onclick="selectSection/,'metrics lead to existing workspaces');
+assert.match(index,/atlas-record-board/,'recent work is composed as one bounded operational board');
+assert.match(index,/atlas-record-columns/,'recent record groups share a dense layout');
+assert.match(index,/atlas-record-row__id/,'record identifiers remain scannable');
+assert.match(index,/function recentContext/,'recent records surface existing context');
+assert.match(index,/row\.customerId/,'recent record context may include existing customer data');
+assert.match(index,/row\.status/,'recent record context may include existing status data');
+assert.match(index,/row\.dueDate/,'recent record context may include existing dates');
+assert.match(index,/row\.total/,'recent record context may include existing invoice totals');
+assert.doesNotMatch(index,/function commandCenter\(\).*surface metric/s,'Command Center no longer emits five sparse metric cards');
+assert.match(index,/Operational overview/,'page header establishes operational hierarchy');
+assert.match(index,/sidebar nav section\+section/,'navigation groups have deliberate rhythm');
+assert.match(index,/nav-button\.active/,'active navigation remains visible');
+assert.match(design,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/,'desktop metrics use one compact row');
+assert.match(design,/@media\(max-width:1024px\)[\s\S]*atlas-compact-metrics/,'tablet metrics reflow centrally');
+assert.match(design,/@media\(max-width:480px\)[\s\S]*atlas-compact-metrics/,'mobile metrics reflow intentionally');
+assert.match(design,/atlas-record-row:focus-visible|:where\(a,button,input,select,textarea,summary,\[tabindex\]\):focus-visible/,'record controls inherit visible focus');
+assert.doesNotMatch(design,/VMOS|Vitality/i,'shared remediation stays tenant neutral');
+assert.equal((index.match(/\.getMvpBootstrap\(\)/g)||[]).length,1,'visual remediation adds no bootstrap call');
+console.log('Atlas Command Center visual-remediation contracts passed');
