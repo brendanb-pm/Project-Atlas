@@ -265,13 +265,13 @@ CalendarFollowUpOrchestrationService_.prototype.resetLink_ = function (link) {
   this.links.update(link.id, link);
 };
 
-function createCalendarFollowUpOrchestration_() {
+function createCalendarFollowUpOrchestration_(checkpoint) {
   var connections = new CalendarConnectionService_({ repository: new UserCalendarConnectionRepository_() });
   var providerServices = typeof createConfiguredCalendarProviderServices_ === 'function'
     ? createConfiguredCalendarProviderServices_()
     : {};
   return new CalendarFollowUpOrchestrationService_({
-    followUps: createFollowUpService_(), connections: connections,
+    followUps: createFollowUpService_(false, checkpoint), connections: connections,
     routing: new FollowUpCalendarRoutingService_(connections),
     links: new CalendarFollowUpLinkRepository_(), requests: new ExternalChangeRequestRepository_(), events: new FollowUpEventRepository_(),
     providerServices: providerServices,

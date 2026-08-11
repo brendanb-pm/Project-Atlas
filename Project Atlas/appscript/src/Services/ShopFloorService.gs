@@ -7,6 +7,7 @@ function ShopFloorService_(dependencies) {
   this.auditUser = dependencies.auditUser || getVmosAuditUser_;
   this.tokenGenerator = dependencies.tokenGenerator || generateOpaqueJobQrToken_;
   this.clock = dependencies.clock || function () { return new Date(); };
+  this.checkpoint = dependencies.checkpoint || function () {};
 }
 
 ShopFloorService_.prototype.configureJob = function (jobId, workflowId, initialStatus) {
@@ -114,6 +115,7 @@ ShopFloorService_.prototype.transition = function (jobId, targetStatus, commandI
     var target = String(targetStatus || '').toUpperCase();
     if (getWorkflowTransitions_(qr.workflowId, job.status).indexOf(target) === -1) throw new VmosValidationError_('Transition from ' + job.status + ' to ' + target + ' is not allowed for this job.');
     self.jobs.update(jobId, { status: target });
+    self.checkpoint(self.jobs.get(jobId));
     self.appendEvent_(job, { eventType: 'STATUS_CHANGED', previousStatus: job.status, newStatus: target, notes: notes || '', workflowId: qr.workflowId, commandId: commandId });
     return self.getJob(jobId);
   });
@@ -126,6 +128,7 @@ ShopFloorService_.prototype.reportProblem = function (jobId, payload, commandId,
   return this.withCommand_(jobId, commandId, token, function (job, qr) {
     if (String(job.status || '').toUpperCase() === 'COMPLETE') throw new VmosValidationError_('Completed work cannot be changed from the shop-floor QR workflow.');
     self.jobs.update(jobId, { status: 'BLOCKED' });
+    self.checkpoint(self.jobs.get(jobId));
     self.appendEvent_(job, { eventType: 'STOP_PROBLEM', previousStatus: job.status, newStatus: 'BLOCKED', notes: payload.notes || '', problemType: payload.reason, responsibleParty: self.auditUser(), nextAction: payload.nextAction || 'Investigate ' + payload.reason.replace(/_/g, ' '), machine: payload.machine || job.machine, tool: payload.tool, program: payload.program || job.program, workflowId: qr.workflowId, commandId: commandId });
     return self.getJob(jobId);
   });
@@ -138,6 +141,7 @@ ShopFloorService_.prototype.resolveBlock = function (jobId, payload, commandId, 
     var target = String(payload.nextStatus || '').toUpperCase();
     if (getShopWorkflow_(qr.workflowId).states.indexOf(target) === -1) throw new VmosValidationError_('Select a valid next production status to resolve this block.');
     self.jobs.update(jobId, { status: target });
+    self.checkpoint(self.jobs.get(jobId));
     self.appendEvent_(job, { eventType: 'BLOCK_RESOLVED', previousStatus: 'BLOCKED', newStatus: target, notes: payload.notes || '', responsibleParty: self.auditUser(), nextAction: payload.nextAction || target.replace(/_/g, ' '), workflowId: qr.workflowId, commandId: commandId });
     return self.getJob(jobId);
   });
