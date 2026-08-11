@@ -42,6 +42,7 @@ function resolveJobBlock(jobId,payload,commandId,qrToken){return callable_('reso
 function listJobEvents(jobId){return callable_('listJobEvents','EXPENSIVE_READ',function(){return new ShopFloorService_().listEvents(jobId);});}
 function getTravelerPrintData(token){return callable_('getTravelerPrintData','QR_LOOKUP',function(){return new ShopFloorService_().getTravelerData(token);},token);}
 function getShopDashboard(){return callable_('getShopDashboard','EXPENSIVE_READ',function(){return new ShopDashboardService_().getLiveWip();});}
+function getFloorBoard(cursor){return callable_('getFloorBoard','EXPENSIVE_READ',function(){return new FloorBoardService_().get(cursor);});}
 function getShopOperatorWorkloads(){return callable_('getShopOperatorWorkloads','EXPENSIVE_READ',function(){return new ShopDashboardService_().listOperatorWorkloads();});}
 function listIdeas(){return callable_('listIdeas','EXPENSIVE_READ',function(){return new IdeasService_().list();});}
 function captureIdea(input){var resourceId=preallocateSecurityResourceId_('IDEA');return callable_('captureIdea','NORMAL_WRITE',function(a){return new IdeasService_(undefined,undefined,function(){return a.userId;},a.checkpoint).capture(input,resourceId,a.correlationId);},null,null,securityOperationOptions_('captureIdea','Idea',resourceId,{input:input},'IDEA_DOMAIN_EVENT',{eventType:'IDEA_CAPTURED',note:input&&input.note||'Idea captured.'}));}
