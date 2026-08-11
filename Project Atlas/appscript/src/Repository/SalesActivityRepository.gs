@@ -1,6 +1,7 @@
 /** The Sheets adapter is selected only at this repository composition boundary. */
 function SalesActivityRepository_(adapter){this.adapter=adapter||new SheetsRepository_('SalesActivity',getSalesActivityConfig_().mapping,SpreadsheetApp.openById(getSalesActivityConfig_().spreadsheetId));}
 SalesActivityRepository_.prototype.create=function(record){return this.adapter.insert(record);};
+SalesActivityRepository_.prototype.createUnique=function(record){return this.adapter.insertUnique?this.adapter.insertUnique(record):this.adapter.insert(record);};
 SalesActivityRepository_.prototype.get=function(id){return this.adapter.findById(id);};
 SalesActivityRepository_.prototype.update=function(id,record){return this.adapter.updateById(id,record);};
 SalesActivityRepository_.prototype.list=function(){return this.adapter.list();};

@@ -2,13 +2,14 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator) {
+function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator, mutationProof) {
   this.config = config || getPurchaseApprovalConfig_();
   this.repository = repository || new PurchaseApprovalRepository_(this.config);
   this.auditUser = auditUser || getVmosAuditUser_;
   this.authoritativeAudit = typeof auditUser === 'function';
   this.lock=lock||null;
   this.idGenerator=idGenerator||newPurchaseApprovalId_;
+  this.mutationProof=mutationProof||null;
 }
 
 PurchaseApprovalService_.prototype.list = function () { return this.repository.list(); };
@@ -32,7 +33,7 @@ PurchaseApprovalService_.prototype.submit = function (input) {
   if (['JOB', 'CAPEX', 'OVERHEAD'].indexOf(classification) === -1) throw new VmosValidationError_('Classification must be Job, CapEx, or Overhead.');
   var actualPurchaseAmount = normalizeActualPurchaseAmount_(input.actualPurchaseAmount);
   var now = new Date(), requiresApproval = amount > this.config.threshold;
-  return this.repository.create({
+  var record={
     id: this.idGenerator(), requestDate: now, requester: String(authoritativeRequester).trim(), vendor: String(input.vendor).trim(),
     category: String(input.category).trim(), classification: classification, businessJustification: String(input.businessJustification).trim(),
     expectedRoiNeed: String(input.expectedRoiNeed).trim(), description: String(input.description).trim(), amount: amount, actualPurchaseAmount: actualPurchaseAmount,
@@ -40,7 +41,9 @@ PurchaseApprovalService_.prototype.submit = function (input) {
     approver: '', approvedAt: '', receiptReference: input.receiptReference ? String(input.receiptReference).trim() : '',
     notes: input.notes ? String(input.notes).trim() : '', createdAt: now, updatedAt: now,
     createdBy: auditActor, updatedBy: auditActor
-  });
+  },proof=typeof this.mutationProof==='function'?this.mutationProof():this.mutationProof;
+  if(proof){record.securityOperationId=proof.operationId;record.securityOperationFingerprint=proof.fingerprint;record.securityTenantId=proof.tenantId;record.securityActorId=proof.actorId;}
+  return this.repository.create(record);
 };
 
 PurchaseApprovalService_.prototype.approve = function (id, approver, notes) {

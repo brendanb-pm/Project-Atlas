@@ -1,4 +1,4 @@
-function MvpService_(entityName, dependencies) { dependencies=dependencies||{}; this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = dependencies.repository||createRepository_(entityName); this.auditUser=dependencies.auditUser||getVmosAuditUser_; }
+function MvpService_(entityName, dependencies) { dependencies=dependencies||{}; this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = dependencies.repository||createRepository_(entityName); this.auditUser=dependencies.auditUser||getVmosAuditUser_; this.mutationProof=dependencies.mutationProof||null; }
 MvpService_.prototype.list = function () { return this.repository.list(); };
 MvpService_.prototype.get = function (id) { return this.repository.findById(id); };
 MvpService_.prototype.update = function (id, changes) {
@@ -12,6 +12,7 @@ MvpService_.prototype.update = function (id, changes) {
   validateEntityInput_(this.definition, proposed); this.validateRelationships_(proposed);
   if (this.definition.fields.updatedAt) changes.updatedAt = new Date();
   if (this.definition.fields.updatedBy) changes.updatedBy = this.auditUser();
+  this.applySecurityProof_(changes);
   return this.repository.updateById(id, changes);
 };
 MvpService_.prototype.allocateId = function () { return generateVmosId_(this.definition.idPrefix, this.repository); };
@@ -27,9 +28,11 @@ MvpService_.prototype.create = function (input, resourceId) {
   if (this.definition.fields.updatedAt) input.updatedAt = now;
   if (this.definition.fields.createdBy) input.createdBy = this.auditUser();
   if (this.definition.fields.updatedBy) input.updatedBy = this.auditUser();
+  this.applySecurityProof_(input);
   if (this.definition.fields.status && !input.status) input.status = this.defaultStatus_();
-  return this.repository.insert(input);
+  return this.repository.insertUnique?this.repository.insertUnique(input):this.repository.insert(input);
 };
+MvpService_.prototype.applySecurityProof_=function(target){var proof=typeof this.mutationProof==='function'?this.mutationProof():this.mutationProof;if(!proof)return;var fields=this.definition.fields||{};if(fields.securityOperationId)target.securityOperationId=proof.operationId;if(fields.securityOperationFingerprint)target.securityOperationFingerprint=proof.fingerprint;if(fields.securityTenantId)target.securityTenantId=proof.tenantId;if(fields.securityActorId)target.securityActorId=proof.actorId;};
 MvpService_.prototype.defaultStatus_ = function () { return { Customer: 'Active', RFQ: 'Received', Quote: 'Draft', Job: 'Planned', Invoice: 'Draft' }[this.entityName]; };
 MvpService_.prototype.applyWorkflowDefaults_ = function (input) {
   if (this.entityName === 'Quote' && input.rfqId) { var rfq = new MvpService_('RFQ').get(input.rfqId); if (!input.customerId) input.customerId = rfq.customerId; if (!input.quoteDate) input.quoteDate = new Date(); }

@@ -5,20 +5,31 @@ const vm=require('vm');
 const base=path.join(__dirname,'..','appscript','src');
 const codeSource=fs.readFileSync(path.join(base,'UI','Code.gs'),'utf8');
 const registrySource=fs.readFileSync(path.join(base,'Services','EndpointAuthorizationRegistry.gs'),'utf8');
+const sheetsSource=fs.readFileSync(path.join(base,'Repository','SheetsRepository.gs'),'utf8');
 assert.match(codeSource,/createMvpRecord[\s\S]*?prepareSecurityResource_/,'MVP creates must prepare their canonical ID after authorization and before ledger begin.');
 assert.match(codeSource,/createSalesActivity[\s\S]*?prepareSecurityResource_[\s\S]*?allocateId/,'SalesActivity creates must preallocate their canonical-format ID.');
 assert.match(codeSource,/recordProcessTrial[\s\S]*?preallocateSecurityResourceId_\('PTR'\)/,'ProcessTrial creates must preallocate their canonical ID.');
 assert.match(codeSource,/submitPurchaseRequest[\s\S]*?preallocateSecurityResourceId_\('PUR'\)/,'Purchase requests must preallocate their canonical ID.');
 assert.match(codeSource,/recordCashReceipt[\s\S]*?receiptCommandId/,'Cash receipt recovery must retain its durable command identity.');
-assert.match(registrySource,/approveQuote:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT'/);
-assert.match(registrySource,/depositCashReceipt:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT'/);
+assert.match(sheetsSource,/insertUnique[\s\S]*?waitLock[\s\S]*?findById[\s\S]*?insert/,'Sequential creates must claim and insert an ID in one short critical section.');
+assert.match(registrySource,/approveQuote:'EXPLICIT_REVIEW'/);
+assert.match(registrySource,/depositCashReceipt:'EXPLICIT_REVIEW'/);
 function DummyRepository(){}
 const context={console,Date,JSON,Object,Array,String,Number,Boolean,Math,Error,
   Utilities:{getUuid:()=> 'UUID'},getSecurityOperationLeaseSeconds_:()=>120,
+  VmosConflictError:function(message){this.message=message;this.code='CONFLICT';},
+  LockService:{getDocumentLock:()=>({waitLock(){},releaseLock(){}}),getScriptLock:()=>({waitLock(){},releaseLock(){}})},
   FollowUpRepository_:DummyRepository,FollowUpEventRepository_:DummyRepository,JobEventRepository_:DummyRepository,
   MvpService_:function(){},SecurityAuditEventRepository_:DummyRepository};
 vm.createContext(context);
 ['Utilities/Errors.gs','Services/IdentityAuthorizationService.gs','Services/SecurityOperationRecoveryService.gs'].forEach(file=>vm.runInContext(fs.readFileSync(path.join(base,file),'utf8'),context,{filename:file}));
+vm.runInContext(sheetsSource,context,{filename:'Repository/SheetsRepository.gs'});
+const claimed=[];
+const uniqueRepo=Object.create(context.SheetsRepository_.prototype);
+uniqueRepo.findById=id=>{const found=claimed.find(row=>row.id===id);if(found)return found;const error=new Error('missing');error.code='NOT_FOUND';throw error;};
+uniqueRepo.insert=record=>{claimed.push(record);return record;};
+uniqueRepo.insertUnique({id:'CUST-26-0001',securityOperationId:'OP-A'});
+assert.throws(()=>uniqueRepo.insertUnique({id:'CUST-26-0001',securityOperationId:'OP-B'}),error=>error&&error.code==='CONFLICT','Two operations cannot claim the same sequential identity.');
 
 let row=null,updateCount=0,failFinalization=true,canonicalCreates=0;
 const repository={
@@ -40,7 +51,9 @@ assert.equal(JSON.parse(row.recoveryJson).strategy,'PREALLOCATED_RESOURCE_ID');
 
 failFinalization=false;
 const recoveryAudit=new context.SecurityAuditService_({repository,lock:null,clock:()=>new Date('2026-08-10T12:03:00Z')});
-const recovery=new context.SecurityOperationRecoveryService_({securityEvents:repository,ledger:recoveryAudit,lock:null,clock:()=>new Date('2026-08-10T12:03:00Z'),mvpFactory:()=>({get:id=>{assert.equal(id,'CUST-1');return{id,status:'Active'};}}),followUps:{},followUpEvents:{},jobs:{},jobEvents:{},qrTokens:{}});
+const recovery=new context.SecurityOperationRecoveryService_({securityEvents:repository,ledger:recoveryAudit,lock:null,clock:()=>new Date('2026-08-10T12:03:00Z'),mvpFactory:()=>({get:id=>{assert.equal(id,'CUST-1');return{id,status:'Active',securityOperationId:row.id,securityOperationFingerprint:row.requestFingerprint,securityTenantId:row.tenantId,securityActorId:row.userId};}}),followUps:{},followUpEvents:{},jobs:{},jobEvents:{},qrTokens:{}});
+const foreignProbe=new context.SecurityOperationRecoveryService_({mvpFactory:()=>({get:()=>({id:'CUST-1',securityOperationId:'FOREIGN',securityOperationFingerprint:'OTHER',securityTenantId:'TENANT-1',securityActorId:'USER-2'})})});
+assert.equal(foreignProbe.probePreallocated_(row).outcome,'UNCERTAIN','An existing resource owned by another operation must not be adopted.');
 const recovered=recovery.reconcile(row.id,{tenantId:'TENANT-1',actor:'SYSTEM:SECURITY_OPERATION_RECOVERY',correlationId:'REC-1'});
 assert.equal(recovered.outcome,'COMPLETED');
 assert.equal(canonicalCreates,1,'Recovery must never repeat canonical creation.');
@@ -63,5 +76,5 @@ assert.equal(row.recoveryStatus,'REVIEW_REQUIRED');
 
 row={...absent,id:'SAE-4',resourceType:'CashReceipt',resourceId:'RCPT-1',recoveryJson:JSON.stringify({strategy:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',expectedState:{depositStatus:'DEPOSITED',depositCommandId:'DEP-1'}})};
 const stateProof=new context.SecurityOperationRecoveryService_({securityEvents:repository,ledger:recoveryAudit,lock:null,clock:()=>new Date('2026-08-10T12:03:00Z'),cashReceipts:{findById:()=>({id:'RCPT-1',depositStatus:'DEPOSITED',depositCommandId:'DEP-1'})},followUps:{},followUpEvents:{},jobs:{},jobEvents:{},qrTokens:{}}).reconcile(row.id,{tenantId:'TENANT-1'});
-assert.equal(stateProof.outcome,'COMPLETED','Matching durable post-state must prove a transition completed.');
+assert.equal(stateProof.outcome,'UNCERTAIN','Matching state without operation ownership proof must require review.');
 console.log('Atlas universal durable mutation recovery tests passed');

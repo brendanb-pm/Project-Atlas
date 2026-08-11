@@ -6,10 +6,12 @@ const vm = require('vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'appscript', 'src', 'Services', 'CashReceiptService.gs'), 'utf8');
 function VmosValidationError_(message) { this.name = 'VmosValidationError_'; this.message = message; }
 VmosValidationError_.prototype = Object.create(Error.prototype);
+function VmosConflictError(message) { this.name = 'VmosConflictError'; this.message = message; }
+VmosConflictError.prototype = Object.create(Error.prototype);
 const lock = { waitLock() {}, releaseLock() {} };
 const context = vm.createContext({
   Date, String, Number, Object, Array, Error, isNaN, console,
-  VmosValidationError_, LockService: { getScriptLock: () => lock },
+  VmosValidationError_, VmosConflictError, LockService: { getScriptLock: () => lock },
   serializeVmosValue_: (value) => JSON.parse(JSON.stringify(value))
 });
 vm.runInContext(source, context);
@@ -25,7 +27,7 @@ const repository = {
 const invoices = { get: (id) => ({ id, customerId: 'CUST-26-0001' }) };
 const service = new context.CashReceiptService_({
   repository, invoices, now: () => new Date('2026-08-07T12:00:00.000Z'), auditUser: () => 'operator@example.com',
-  idGenerator: () => 'RCPT-26-0001'
+  idGenerator: () => 'RCPT-26-0001', mutationProof: {operationId:'OP-1',fingerprint:'FP-1',tenantId:'TENANT-1',actorId:'operator@example.com'}
 });
 
 const input = { invoiceId: 'INV-26-0001', customerId: 'CUST-26-0001', receiptCommandId: 'receipt-command-1', receivedDate: '2026-08-01', amount: '125.50', paymentMethod: 'CHECK', referenceNumber: '1001' };
@@ -36,6 +38,9 @@ assert.equal(receipt.amount, 125.5);
 assert.equal(rows.length, 1);
 assert.strictEqual(service.recordReceipt(input), receipt, 'A replayed receipt command must not create a second receipt.');
 assert.equal(rows.length, 1);
+assert.throws(() => service.recordReceipt({ ...input, invoiceId:'INV-OTHER', amount:'999' }), /different operation/);
+const foreignActorService=new context.CashReceiptService_({repository,invoices,auditUser:()=> 'other@example.com',mutationProof:{operationId:'OP-2',fingerprint:'FP-2',tenantId:'TENANT-1',actorId:'other@example.com'}});
+assert.throws(() => foreignActorService.recordReceipt(input), /different operation/);
 assert.throws(() => service.recordReceipt({ ...input, receiptCommandId: 'bad-amount', amount: 0 }), /greater than zero/);
 assert.throws(() => service.recordReceipt({ ...input, receiptCommandId: 'wrong-customer', customerId: 'CUST-26-9999' }), /must match/);
 

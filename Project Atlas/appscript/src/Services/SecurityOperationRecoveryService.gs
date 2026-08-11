@@ -69,17 +69,19 @@ SecurityOperationRecoveryService_.prototype.probeUniversal_=function(record){
   if(strategy==='VERSIONED_EXISTING_RESOURCE_CHECKPOINT')return this.probeState_(record,context);
   return {outcome:'UNCERTAIN'};
 };
-SecurityOperationRecoveryService_.prototype.probePreallocated_=function(record){if(!record.resourceId)return {outcome:'UNCERTAIN'};try{this.resource_(record);return {outcome:'COMPLETED'};}catch(error){if(error&&error.code==='NOT_FOUND')return {outcome:'NOT_COMPLETED'};throw error;}};
+SecurityOperationRecoveryService_.prototype.probePreallocated_=function(record){if(!record.resourceId)return {outcome:'UNCERTAIN'};try{var resource=this.resource_(record);return this.matchesOperationProof_(record,resource)?{outcome:'COMPLETED'}:{outcome:'UNCERTAIN'};}catch(error){if(error&&error.code==='NOT_FOUND')return {outcome:'NOT_COMPLETED'};throw error;}};
 SecurityOperationRecoveryService_.prototype.probeCommand_=function(record,context){
-  if(record.resourceType==='CashReceipt'&&this.cashReceipts){var found=context.receiptCommandId?this.cashReceipts.findByReceiptCommandId(context.receiptCommandId):record.resourceId?this.cashReceipts.findById(record.resourceId):null;if(found){record.resourceId=found.id;return {outcome:'COMPLETED'};}return {outcome:'NOT_COMPLETED'};}
+  if(record.resourceType==='CashReceipt'&&this.cashReceipts){var found=context.receiptCommandId?this.cashReceipts.findByReceiptCommandId(context.receiptCommandId):record.resourceId?this.cashReceipts.findById(record.resourceId):null;if(found){if(!this.matchesOperationProof_(record,found))return {outcome:'UNCERTAIN'};record.resourceId=found.id;return {outcome:'COMPLETED'};}return {outcome:'NOT_COMPLETED'};}
   return {outcome:'UNCERTAIN'};
 };
 SecurityOperationRecoveryService_.prototype.probeState_=function(record,context){
   var resource;try{resource=this.resource_(record);}catch(error){if(error&&error.code==='NOT_FOUND')return {outcome:'NOT_COMPLETED'};throw error;}
+  if(!this.matchesOperationProof_(record,resource))return {outcome:'UNCERTAIN'};
   var expected=context.expectedState||{};
   if(!Object.keys(expected).length)return {outcome:'UNCERTAIN'};
   return Object.keys(expected).every(function(key){return String(resource[key]===undefined?'':resource[key])===String(expected[key]===undefined?'':expected[key]);})?{outcome:'COMPLETED'}:{outcome:'UNCERTAIN'};
 };
+SecurityOperationRecoveryService_.prototype.matchesOperationProof_=function(record,resource){return !!resource&&String(resource.securityOperationId||'')===String(record.id||'')&&String(resource.securityOperationFingerprint||'')===String(record.requestFingerprint||'')&&String(resource.securityTenantId||'')===String(record.tenantId||'')&&String(resource.securityActorId||'')===String(record.userId||'');};
 SecurityOperationRecoveryService_.prototype.resource_=function(record){
   var type=String(record.resourceType||''),id=record.resourceId;if(!id)throw new VmosError_('Recovery resource is unavailable.','NOT_FOUND');
   if(['Customer','RFQ','Quote','Job','Invoice'].indexOf(type)!==-1)return this.mvpFactory(type).get(id);

@@ -30,10 +30,10 @@ var ATLAS_MUTATION_RECOVERY = {
   createSalesActivity:'PREALLOCATED_RESOURCE_ID',updateSalesActivity:'EXPLICIT_REVIEW',
   createFollowUp:'DOMAIN_SPECIFIC_RECOVERY',rescheduleFollowUp:'DOMAIN_SPECIFIC_RECOVERY',scheduleFollowUp:'DOMAIN_SPECIFIC_RECOVERY',reassignFollowUp:'DOMAIN_SPECIFIC_RECOVERY',
   disconnectCalendarConnection:'EXPLICIT_REVIEW',retryCalendarConnection:'EXPLICIT_REVIEW',resolveCalendarExternalChange:'EXPLICIT_REVIEW',retryCalendarCleanup:'EXPLICIT_REVIEW',acknowledgeCalendarCleanup:'EXPLICIT_REVIEW',completeFollowUp:'DOMAIN_SPECIFIC_RECOVERY',cancelFollowUp:'DOMAIN_SPECIFIC_RECOVERY',
-  createMvpRecord:'PREALLOCATED_RESOURCE_ID',updateMvpRecord:'EXPLICIT_REVIEW',approveQuote:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',issueQuote:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',
+  createMvpRecord:'PREALLOCATED_RESOURCE_ID',updateMvpRecord:'EXPLICIT_REVIEW',approveQuote:'EXPLICIT_REVIEW',issueQuote:'EXPLICIT_REVIEW',
   configureShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',transitionShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',reportJobProblem:'DOMAIN_SPECIFIC_RECOVERY',resolveJobBlock:'DOMAIN_SPECIFIC_RECOVERY',
   captureIdea:'DOMAIN_SPECIFIC_RECOVERY',requestIdeaPromotion:'DOMAIN_SPECIFIC_RECOVERY',recordProcessTrial:'PREALLOCATED_RESOURCE_ID',
-  recordCashReceipt:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',depositCashReceipt:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',submitPurchaseRequest:'PREALLOCATED_RESOURCE_ID',approvePurchaseRequest:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',recordPurchaseReceipt:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',
+  recordCashReceipt:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',depositCashReceipt:'EXPLICIT_REVIEW',submitPurchaseRequest:'PREALLOCATED_RESOURCE_ID',approvePurchaseRequest:'EXPLICIT_REVIEW',recordPurchaseReceipt:'EXPLICIT_REVIEW',
   initializeIdeasPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',initializeShopOperationalPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION'
 };
 function getMvpEntityCapability_(entity,access) {var policy=ATLAS_MVP_ENTITY_CAPABILITIES[entity];if(!policy)throw new VmosValidationError_('Unsupported entity.');return policy[access];}

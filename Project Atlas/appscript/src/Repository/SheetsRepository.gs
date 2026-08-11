@@ -73,6 +73,10 @@ SheetsRepository_.prototype.insert = function (data) {
   Object.keys(data).forEach(function (logical) { row[mapping[logical].column - 1] = toSafeSheetsCellValue_(data[logical]); });
   sheet.appendRow(row); return this.findById(data.id);
 };
+SheetsRepository_.prototype.insertUnique = function (data) {
+  var lock=(LockService.getDocumentLock&&LockService.getDocumentLock())||LockService.getScriptLock();lock.waitLock(30000);
+  try{try{this.findById(data.id);throw new VmosConflictError('Record ID is already reserved.');}catch(error){if(!error||error.code!=='NOT_FOUND')throw error;}return this.insert(data);}finally{lock.releaseLock();}
+};
 SheetsRepository_.prototype.updateById = function (id, changes) {
   if (Object.prototype.hasOwnProperty.call(changes, 'id')) throw new VmosValidationError_('Primary key cannot be changed.');
   var located = this.findRowById_(id); this.assertWritable_(changes, located.mapping);

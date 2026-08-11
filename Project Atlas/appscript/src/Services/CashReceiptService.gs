@@ -8,6 +8,7 @@ function CashReceiptService_(dependencies) {
   // recordReceipt already holds the script lock for command idempotency, so
   // the default generator must not try to acquire that lock a second time.
   this.idGenerator = dependencies.idGenerator || generateCashReceiptIdUnderLock_;
+  this.mutationProof = dependencies.mutationProof || null;
 }
 
 CashReceiptService_.prototype.recordReceipt = function (input) {
@@ -21,16 +22,18 @@ CashReceiptService_.prototype.recordReceipt = function (input) {
   validateCashDate_(input.receivedDate, 'Received date');
   return withCashReceiptLock_(function () {
     var existing = self.repository.findByReceiptCommandId(input.receiptCommandId);
-    if (existing) return existing;
+    if (existing) { if(!cashReceiptIntentMatches_(existing,input,self.mutationProof))throw new VmosConflictError('Receipt command is already associated with a different operation.');return existing; }
     var invoice = self.invoices.get(input.invoiceId);
     if (String(invoice.customerId) !== String(input.customerId)) throw new VmosValidationError_('Receipt customer must match its invoice customer.');
     var now = self.now(), actor = self.auditUser();
-    return self.repository.insert({
+    var record={
       id: self.idGenerator(self.repository), receiptCommandId: input.receiptCommandId, invoiceId: input.invoiceId, customerId: input.customerId,
       receivedDate: input.receivedDate, amount: Number(input.amount), paymentMethod: input.paymentMethod, referenceNumber: input.referenceNumber || '',
       depositStatus: 'UNDEPOSITED', depositDate: '', depositReference: '', depositCommandId: '', notes: input.notes || '',
       createdAt: now, createdBy: actor, updatedAt: now, updatedBy: actor
-    });
+    },proof=typeof self.mutationProof==='function'?self.mutationProof():self.mutationProof;
+    if(proof){record.securityOperationId=proof.operationId;record.securityOperationFingerprint=proof.fingerprint;record.securityTenantId=proof.tenantId;record.securityActorId=proof.actorId;}
+    return self.repository.insert(record);
   });
 };
 
@@ -77,6 +80,7 @@ function cashReceiptDate_(value) {
   return isNaN(date.getTime()) ? null : date;
 }
 function cashReceiptStartOfDay_(date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(); }
+function cashReceiptIntentMatches_(record,input,proof){proof=typeof proof==='function'?proof():proof;if(!proof)return false;return String(record.securityOperationFingerprint||'')===String(proof.fingerprint||'')&&String(record.securityTenantId||'')===String(proof.tenantId||'')&&String(record.securityActorId||'')===String(proof.actorId||'')&&String(record.invoiceId||'')===String(input.invoiceId||'')&&String(record.customerId||'')===String(input.customerId||'')&&Number(record.amount)===Number(input.amount)&&String(record.paymentMethod||'')===String(input.paymentMethod||'')&&String(record.receivedDate||'')===String(input.receivedDate||'')&&String(record.referenceNumber||'')===String(input.referenceNumber||'');}
 function withCashReceiptLock_(action) { var lock = LockService.getScriptLock(); lock.waitLock(30000); try { return action(); } finally { lock.releaseLock(); } }
 function generateCashReceiptIdUnderLock_(repository) {
   var year = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yy');

@@ -4,9 +4,9 @@
  */
 var VMOS_PROCESS_TRIAL_MAPPING = {
   sheetName: 'ProcessTrials', idField: 'TrialID',
-  headers: ['TrialID', 'JobID', 'Machine', 'Material', 'Operation', 'Tool', 'Tool Number', 'Diameter', 'Holder', 'Stickout', 'RPM', 'Feed', 'DOC/Peck', 'Coolant', 'Outcome', 'Tool Life', 'Failure Mode', 'Parameter Classification', 'Notes', 'Observed At', 'Recorded By', 'Created At'],
+  headers: ['TrialID', 'JobID', 'Machine', 'Material', 'Operation', 'Tool', 'Tool Number', 'Diameter', 'Holder', 'Stickout', 'RPM', 'Feed', 'DOC/Peck', 'Coolant', 'Outcome', 'Tool Life', 'Failure Mode', 'Parameter Classification', 'Notes', 'Observed At', 'Recorded By', 'Created At', 'Security Operation ID', 'Security Operation Fingerprint', 'Security Tenant ID', 'Security Actor ID'],
   fields: {
-    id: ['TrialID'], jobId: ['JobID'], machine: ['Machine'], material: ['Material'], operation: ['Operation'], tool: ['Tool'], toolNumber: ['Tool Number'], diameter: ['Diameter'], holder: ['Holder'], stickout: ['Stickout'], rpm: ['RPM'], feed: ['Feed'], docPeck: ['DOC/Peck'], coolant: ['Coolant'], outcome: ['Outcome'], toolLife: ['Tool Life'], failureMode: ['Failure Mode'], parameterClassification: ['Parameter Classification'], notes: ['Notes'], observedAt: ['Observed At'], recordedBy: ['Recorded By'], createdAt: ['Created At']
+    id: ['TrialID'], jobId: ['JobID'], machine: ['Machine'], material: ['Material'], operation: ['Operation'], tool: ['Tool'], toolNumber: ['Tool Number'], diameter: ['Diameter'], holder: ['Holder'], stickout: ['Stickout'], rpm: ['RPM'], feed: ['Feed'], docPeck: ['DOC/Peck'], coolant: ['Coolant'], outcome: ['Outcome'], toolLife: ['Tool Life'], failureMode: ['Failure Mode'], parameterClassification: ['Parameter Classification'], notes: ['Notes'], observedAt: ['Observed At'], recordedBy: ['Recorded By'], createdAt: ['Created At'], securityOperationId: ['Security Operation ID'], securityOperationFingerprint: ['Security Operation Fingerprint'], securityTenantId: ['Security Tenant ID'], securityActorId: ['Security Actor ID']
   }
 };
 
@@ -26,6 +26,7 @@ function ProcessTrialService_(dependencies) {
   this.clock = dependencies.clock || function () { return new Date(); };
   this.actor = dependencies.actor || getVmosAuditUser_;
   this.uuid = dependencies.uuid || function () { return Utilities.getUuid(); };
+  this.mutationProof = dependencies.mutationProof || null;
 }
 ProcessTrialService_.prototype.record = function (input) {
   input = input || {};
@@ -34,9 +35,11 @@ ProcessTrialService_.prototype.record = function (input) {
   if (!String(input.outcome || '').trim()) throw new VmosValidationError_('Outcome is required so the observation is useful later.');
   if (input.jobId) this.jobs.get(input.jobId);
   var now = this.clock();
-  return this.repository.append({
+  var record={
     id: 'PTR-' + this.uuid().toUpperCase(), jobId: input.jobId || '', machine: input.machine || '', material: input.material || '', operation: input.operation || '', tool: input.tool || '', toolNumber: input.toolNumber || '', diameter: input.diameter || '', holder: input.holder || '', stickout: input.stickout || '', rpm: input.rpm || '', feed: input.feed || '', docPeck: input.docPeck || '', coolant: input.coolant || '', outcome: input.outcome, toolLife: input.toolLife || '', failureMode: input.failureMode || '', parameterClassification: classification, notes: input.notes || '', observedAt: input.observedAt || now, recordedBy: this.actor(), createdAt: now
-  });
+  },proof=typeof this.mutationProof==='function'?this.mutationProof():this.mutationProof;
+  if(proof){record.securityOperationId=proof.operationId;record.securityOperationFingerprint=proof.fingerprint;record.securityTenantId=proof.tenantId;record.securityActorId=proof.actorId;}
+  return this.repository.append(record);
 };
 ProcessTrialService_.prototype.listForJob = function (jobId) {
   if (!jobId) throw new VmosValidationError_('Job ID is required.');
