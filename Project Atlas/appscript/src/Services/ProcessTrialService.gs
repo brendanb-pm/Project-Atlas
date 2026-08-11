@@ -16,6 +16,7 @@ function ProcessTrialRepository_() {
 }
 ProcessTrialRepository_.prototype.list = function () { return this.repository.list(); };
 ProcessTrialRepository_.prototype.append = function (record) { return this.repository.insert(record); };
+ProcessTrialRepository_.prototype.findById = function (id) { return this.repository.findById(id); };
 ProcessTrialRepository_.prototype.listByJobId = function (jobId) { return this.list().filter(function (record) { return String(record.jobId) === String(jobId); }); };
 
 function ProcessTrialService_(dependencies) {

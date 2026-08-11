@@ -2,12 +2,13 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService_(repository, config, auditUser, lock) {
+function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator) {
   this.config = config || getPurchaseApprovalConfig_();
   this.repository = repository || new PurchaseApprovalRepository_(this.config);
   this.auditUser = auditUser || getVmosAuditUser_;
   this.authoritativeAudit = typeof auditUser === 'function';
   this.lock=lock||null;
+  this.idGenerator=idGenerator||newPurchaseApprovalId_;
 }
 
 PurchaseApprovalService_.prototype.list = function () { return this.repository.list(); };
@@ -32,7 +33,7 @@ PurchaseApprovalService_.prototype.submit = function (input) {
   var actualPurchaseAmount = normalizeActualPurchaseAmount_(input.actualPurchaseAmount);
   var now = new Date(), requiresApproval = amount > this.config.threshold;
   return this.repository.create({
-    id: newPurchaseApprovalId_(), requestDate: now, requester: String(authoritativeRequester).trim(), vendor: String(input.vendor).trim(),
+    id: this.idGenerator(), requestDate: now, requester: String(authoritativeRequester).trim(), vendor: String(input.vendor).trim(),
     category: String(input.category).trim(), classification: classification, businessJustification: String(input.businessJustification).trim(),
     expectedRoiNeed: String(input.expectedRoiNeed).trim(), description: String(input.description).trim(), amount: amount, actualPurchaseAmount: actualPurchaseAmount,
     status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED_NO_APPROVAL_REQUIRED', approvalRequired: requiresApproval,

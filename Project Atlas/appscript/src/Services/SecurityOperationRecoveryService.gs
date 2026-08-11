@@ -8,6 +8,11 @@ function SecurityOperationRecoveryService_(dependencies){
   this.jobs=dependencies.jobs||new MvpService_('Job');
   this.jobEvents=dependencies.jobEvents||new JobEventRepository_();
   this.qrTokens=dependencies.qrTokens||(typeof JobQrTokenRepository_!=='undefined'?new JobQrTokenRepository_():null);
+  this.salesActivities=dependencies.salesActivities||(typeof SalesActivityRepository_!=='undefined'?new SalesActivityRepository_():null);
+  this.processTrials=dependencies.processTrials||(typeof ProcessTrialRepository_!=='undefined'?new ProcessTrialRepository_():null);
+  this.cashReceipts=dependencies.cashReceipts||(typeof CashReceiptRepository_!=='undefined'?new CashReceiptRepository_():null);
+  this.purchases=dependencies.purchases||(typeof PurchaseApprovalRepository_!=='undefined'?new PurchaseApprovalRepository_():null);
+  this.mvpFactory=dependencies.mvpFactory||function(type){return new MvpService_(type);};
   this.ledger=dependencies.ledger||new SecurityAuditService_({repository:this.securityEvents});
   this.clock=dependencies.clock||function(){return new Date();};
   this.lock=dependencies.lock||(typeof LockService!=='undefined'?LockService.getScriptLock():null);
@@ -25,6 +30,7 @@ SecurityOperationRecoveryService_.prototype.reconcile=function(eventId,recoveryC
   if(claimStatus!=='RECONCILING')return {outcome:'ACTIVE',record:claimed};
   try{
     var probe=this.probe_(claimed);
+    if(probe.outcome==='NOT_COMPLETED')return {outcome:'NOT_COMPLETED',proof:true,record:claimed};
     if(probe.outcome!=='COMPLETED'){
       var uncertain=this.ledger.markRecoveryRequired(claimed,'STALE_OUTCOME_UNCERTAIN',recoveryContext.actor,recoveryContext.correlationId);
       return {outcome:'UNCERTAIN',record:uncertain};
@@ -51,7 +57,37 @@ SecurityOperationRecoveryService_.prototype.probe_=function(record){
   if(record.recoveryType==='FOLLOW_UP_DOMAIN_EVENT')return this.probeFollowUp_(record);
   if(record.recoveryType==='IDEA_DOMAIN_EVENT')return this.probeIdea_(record);
   if(record.recoveryType==='SHOP_FLOOR_DOMAIN_EVENT')return this.probeShopFloor_(record);
+  if(record.recoveryType==='UNIVERSAL_RESOURCE_PROOF')return this.probeUniversal_(record);
   return {outcome:'UNCERTAIN'};
+};
+
+SecurityOperationRecoveryService_.prototype.probeUniversal_=function(record){
+  var context=this.context_(record),strategy=context.strategy||'';
+  if(strategy==='EXPLICIT_REVIEW')return {outcome:'UNCERTAIN'};
+  if(strategy==='COMMAND_IDEMPOTENCY_KEY_LOOKUP')return this.probeCommand_(record,context);
+  if(strategy==='PREALLOCATED_RESOURCE_ID')return this.probePreallocated_(record);
+  if(strategy==='VERSIONED_EXISTING_RESOURCE_CHECKPOINT')return this.probeState_(record,context);
+  return {outcome:'UNCERTAIN'};
+};
+SecurityOperationRecoveryService_.prototype.probePreallocated_=function(record){if(!record.resourceId)return {outcome:'UNCERTAIN'};try{this.resource_(record);return {outcome:'COMPLETED'};}catch(error){if(error&&error.code==='NOT_FOUND')return {outcome:'NOT_COMPLETED'};throw error;}};
+SecurityOperationRecoveryService_.prototype.probeCommand_=function(record,context){
+  if(record.resourceType==='CashReceipt'&&this.cashReceipts){var found=context.receiptCommandId?this.cashReceipts.findByReceiptCommandId(context.receiptCommandId):record.resourceId?this.cashReceipts.findById(record.resourceId):null;if(found){record.resourceId=found.id;return {outcome:'COMPLETED'};}return {outcome:'NOT_COMPLETED'};}
+  return {outcome:'UNCERTAIN'};
+};
+SecurityOperationRecoveryService_.prototype.probeState_=function(record,context){
+  var resource;try{resource=this.resource_(record);}catch(error){if(error&&error.code==='NOT_FOUND')return {outcome:'NOT_COMPLETED'};throw error;}
+  var expected=context.expectedState||{};
+  if(!Object.keys(expected).length)return {outcome:'UNCERTAIN'};
+  return Object.keys(expected).every(function(key){return String(resource[key]===undefined?'':resource[key])===String(expected[key]===undefined?'':expected[key]);})?{outcome:'COMPLETED'}:{outcome:'UNCERTAIN'};
+};
+SecurityOperationRecoveryService_.prototype.resource_=function(record){
+  var type=String(record.resourceType||''),id=record.resourceId;if(!id)throw new VmosError_('Recovery resource is unavailable.','NOT_FOUND');
+  if(['Customer','RFQ','Quote','Job','Invoice'].indexOf(type)!==-1)return this.mvpFactory(type).get(id);
+  if(type==='SalesActivity'&&this.salesActivities)return this.salesActivities.get(id);
+  if(type==='ProcessTrial'&&this.processTrials)return this.processTrials.findById(id);
+  if(type==='CashReceipt'&&this.cashReceipts)return this.cashReceipts.findById(id);
+  if(type==='PurchaseRequest'&&this.purchases)return this.purchases.findById(id);
+  throw new VmosError_('Recovery resource is unavailable.','NOT_FOUND');
 };
 
 SecurityOperationRecoveryService_.prototype.probeFollowUp_=function(record){
@@ -100,6 +136,7 @@ SecurityOperationRecoveryService_.prototype.recoverRecord_=function(record,recov
   if(record.recoveryType==='FOLLOW_UP_DOMAIN_EVENT')return this.recoverFollowUpEvent_(record,recoveryContext);
   if(record.recoveryType==='IDEA_DOMAIN_EVENT')return this.recoverIdeaEvent_(record,recoveryContext);
   if(record.recoveryType==='SHOP_FLOOR_DOMAIN_EVENT')return this.recoverShopFloorEvent_(record,recoveryContext);
+  if(record.recoveryType==='UNIVERSAL_RESOURCE_PROOF')return this.resource_(record);
   throw new VmosConfigurationError_('No recovery handler is registered for this operation.');
 };
 

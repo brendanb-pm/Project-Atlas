@@ -14,14 +14,15 @@ MvpService_.prototype.update = function (id, changes) {
   if (this.definition.fields.updatedBy) changes.updatedBy = this.auditUser();
   return this.repository.updateById(id, changes);
 };
-MvpService_.prototype.create = function (input) {
+MvpService_.prototype.allocateId = function () { return generateVmosId_(this.definition.idPrefix, this.repository); };
+MvpService_.prototype.create = function (input, resourceId) {
   input = input || {};
   // HTML forms submit blank optional controls. Remove them before validating the
   // workbook mapping so an unused optional field does not require a header.
   Object.keys(input).forEach(function (key) { if (input[key] === '') delete input[key]; });
   this.applyWorkflowDefaults_(input); validateEntityInput_(this.definition, input); this.validateRelationships_(input);
   var now = new Date();
-  input.id = generateVmosId_(this.definition.idPrefix, this.repository);
+  input.id = resourceId || this.allocateId();
   if (this.definition.fields.createdAt) input.createdAt = now;
   if (this.definition.fields.updatedAt) input.updatedAt = now;
   if (this.definition.fields.createdBy) input.createdBy = this.auditUser();

@@ -23,4 +23,11 @@ assert.match(registry,/enforceAbuseControl_[\s\S]*authorizedExecute_/,'Abuse scr
 assert.doesNotMatch(code,/getVmosAuditUser_\(/,'Callable endpoints must not derive audit identity from deployment/session fallback.');
 assert.doesNotMatch(code,/\.approve\(id,approver/,'Client approver must not reach purchase approval.');
 assert.doesNotMatch(code,/recordReceipt\(id,reference,actor/,'Client receipt actor must not reach persistence.');
+const recoveryBlock=(registry.match(/var ATLAS_MUTATION_RECOVERY\s*=\s*\{([\s\S]*?)\n\};/)||[])[1]||'';
+const recoveryNames=Array.from(recoveryBlock.matchAll(/([A-Za-z][A-Za-z0-9_]*):\s*'[^']+'/g)).map(match=>match[1]);
+Object.keys(eval('('+registry.match(/var ATLAS_CALLABLE_ENDPOINTS\s*=\s*(\{[\s\S]*?\n\});/)[1]+')')).forEach(name=>{
+  const entry=eval('('+registry.match(/var ATLAS_CALLABLE_ENDPOINTS\s*=\s*(\{[\s\S]*?\n\});/)[1]+')')[name];
+  if(['WRITE','HIGH_RISK_WRITE','ADMINISTRATIVE'].includes(entry.kind))assert.ok(recoveryNames.includes(name),name+' must declare a durable recovery strategy.');
+});
+assert.match(registry,/if\(!strategy\)throw new VmosConfigurationError_/,'Unclassified writable mutations must fail closed.');
 console.log('Atlas callable endpoint authorization coverage tests passed:',callableNames.length,'classified endpoints');

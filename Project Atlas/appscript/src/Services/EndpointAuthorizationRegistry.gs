@@ -26,9 +26,20 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   doGet:{kind:'READ_ONLY',capability:null}
 };
 var ATLAS_MVP_ENTITY_CAPABILITIES={Customer:{read:'CORE_RECORD_READ',write:'CORE_RECORD_WRITE'},RFQ:{read:'RFQ_READ',write:'RFQ_WRITE'},Quote:{read:'RFQ_READ',write:'QUOTE_WRITE'},Job:{read:'OPERATIONS_READ',write:'OPERATIONS_WRITE'},Invoice:{read:'FINANCE_READ',write:'FINANCE_WRITE'}};
+var ATLAS_MUTATION_RECOVERY = {
+  createSalesActivity:'PREALLOCATED_RESOURCE_ID',updateSalesActivity:'EXPLICIT_REVIEW',
+  createFollowUp:'DOMAIN_SPECIFIC_RECOVERY',rescheduleFollowUp:'DOMAIN_SPECIFIC_RECOVERY',scheduleFollowUp:'DOMAIN_SPECIFIC_RECOVERY',reassignFollowUp:'DOMAIN_SPECIFIC_RECOVERY',
+  disconnectCalendarConnection:'EXPLICIT_REVIEW',retryCalendarConnection:'EXPLICIT_REVIEW',resolveCalendarExternalChange:'EXPLICIT_REVIEW',retryCalendarCleanup:'EXPLICIT_REVIEW',acknowledgeCalendarCleanup:'EXPLICIT_REVIEW',completeFollowUp:'DOMAIN_SPECIFIC_RECOVERY',cancelFollowUp:'DOMAIN_SPECIFIC_RECOVERY',
+  createMvpRecord:'PREALLOCATED_RESOURCE_ID',updateMvpRecord:'EXPLICIT_REVIEW',approveQuote:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',issueQuote:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',
+  configureShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',transitionShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',reportJobProblem:'DOMAIN_SPECIFIC_RECOVERY',resolveJobBlock:'DOMAIN_SPECIFIC_RECOVERY',
+  captureIdea:'DOMAIN_SPECIFIC_RECOVERY',requestIdeaPromotion:'DOMAIN_SPECIFIC_RECOVERY',recordProcessTrial:'PREALLOCATED_RESOURCE_ID',
+  recordCashReceipt:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',depositCashReceipt:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',submitPurchaseRequest:'PREALLOCATED_RESOURCE_ID',approvePurchaseRequest:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',recordPurchaseReceipt:'VERSIONED_EXISTING_RESOURCE_CHECKPOINT',
+  initializeIdeasPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',initializeShopOperationalPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION'
+};
 function getMvpEntityCapability_(entity,access) {var policy=ATLAS_MVP_ENTITY_CAPABILITIES[entity];if(!policy)throw new VmosValidationError_('Unsupported entity.');return policy[access];}
 function securityOperationOptions_(operation,resourceType,resourceId,parts,recoveryType,recoveryContext){var serialized=JSON.stringify(parts||{}),bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,serialized,Utilities.Charset.UTF_8),digest=bytes.map(function(value){var normalized=value<0?value+256:value;return ('0'+normalized.toString(16)).slice(-2);}).join('');return {idempotencyKey:operation+':'+digest,requestFingerprint:digest,resourceType:resourceType||'',resourceId:resourceId||'',recoveryType:recoveryType||'',recoveryContext:recoveryContext||{}};}
 function preallocateSecurityResourceId_(prefix){return prefix+'-'+Utilities.getUuid().toUpperCase();}
+function prepareSecurityResource_(options,allocator){options.prepare=function(context){var id=allocator(context);return {resourceId:id,recoveryContext:Object.assign({},options.recoveryContext||{},{resourceId:id})};};return options;}
 function executeCallable_(endpointName,abusePolicy,operation,abuseKey,capabilityOverride,operationOptions) {
   var policy=ATLAS_CALLABLE_ENDPOINTS[endpointName];
   if(!policy)throw new VmosAuthorizationError_('Callable operation is not classified.');
@@ -36,5 +47,12 @@ function executeCallable_(endpointName,abusePolicy,operation,abuseKey,capability
   var capability=typeof capabilityOverride==='function'?capabilityOverride():capabilityOverride||policy.capability;
   if(capability==='DYNAMIC_MVP')throw new VmosAuthorizationError_('Domain capability was not resolved.');
   operationOptions=operationOptions||{};operationOptions.auditRequired=policy.kind!=='READ'&&policy.kind!=='READ_ONLY';
+  if(operationOptions.auditRequired){
+    var strategy=ATLAS_MUTATION_RECOVERY[endpointName];
+    if(!strategy)throw new VmosConfigurationError_('Callable mutation recovery is not classified.');
+    operationOptions.recoveryContext=operationOptions.recoveryContext||{};
+    operationOptions.recoveryContext.strategy=strategy;
+    if(!operationOptions.recoveryType)operationOptions.recoveryType='UNIVERSAL_RESOURCE_PROOF';
+  }
   return authorizedExecute_(capability,endpointName,operation,operationOptions);
 }
