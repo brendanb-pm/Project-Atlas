@@ -3,7 +3,7 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   getAtlasNavigation:{kind:'READ',capability:null},
   getCommandCenterWorkspace:{kind:'READ',capability:null},
   getAtlasActivationHealth:{kind:'READ',capability:'ADMIN_CONFIG'},
-  getAdminWorkspace:{kind:'READ',capability:'ADMIN_CONFIG'}, getAdminIdentityWorkspace:{kind:'READ',capability:'ADMIN_IDENTITY'},
+  getAdminWorkspace:{kind:'READ',capability:'ADMIN_CONFIG'}, getAdminIdentityWorkspace:{kind:'READ',capability:'ADMIN_IDENTITY'}, getPlatformCommercialWorkspace:{kind:'READ',capability:'PLATFORM_TENANT_READ'},
   createSalesActivity:{kind:'WRITE',capability:'SALES_WRITE'}, updateSalesActivity:{kind:'WRITE',capability:'SALES_WRITE'},
   getSalesActivityTimeline:{kind:'READ',capability:'SALES_READ'}, getSalesFollowUpQueue:{kind:'READ',capability:'SALES_READ'},
   getSalesCustomerDirectory:{kind:'READ',capability:'SALES_READ'}, getSalesCustomerWorkspace:{kind:'READ',capability:'SALES_READ'},

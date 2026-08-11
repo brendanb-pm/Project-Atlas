@@ -12,6 +12,7 @@ var ATLAS_ROUTE_REGISTRY=[
   {id:'invoices',group:'FINANCE',label:'Invoices',description:'Invoice records and status.',href:'?route=invoices',capabilities:['FINANCE_READ']},
   {id:'ideas',group:'HOME',label:'Ideas',description:'Future opportunities outside operational work.',href:'?route=ideas',capabilities:['CORE_RECORD_READ']}
   ,{id:'admin',group:'ADMIN / SETTINGS',label:'Admin / Settings',description:'Tenant configuration, access, integrations, and health.',href:'?route=admin',capabilities:['ADMIN_CONFIG','ADMIN_IDENTITY']}
+  ,{id:'platform-commercial',group:'ADMIN / SETTINGS',label:'Platform Administration',description:'Cross-tenant subscription, seat, module, and billing attention.',href:'?route=platform-commercial',capabilities:['PLATFORM_TENANT_READ']}
 ];
 var ATLAS_ROUTE_GROUPS=['HOME','CRM','COMMERCIAL','OPERATIONS','PURCHASING','FINANCE','DOCUMENTS','SPECIALTY MODULES','ADMIN / SETTINGS'];
 var ATLAS_LEGACY_ROUTE_ALIASES={sales:'sales-activity',ideas:'ideas',dashboard:'operations-dashboard',shop:'shop-floor',calendar:'follow-ups',traveler:'traveler'};
@@ -25,5 +26,5 @@ AtlasNavigationService_.prototype.getModel=function(context,currentRoute){
 function atlasNavigationRoute_(route){return {id:route.id,label:route.label,description:route.description,href:route.href};}
 function normalizeAtlasRoute_(value){var route=String(value||'home').trim().toLowerCase();return ATLAS_LEGACY_ROUTE_ALIASES[route]||route||'home';}
 function resolveAtlasRoute_(event){event=event||{};var parameters=event.parameter||{},route=normalizeAtlasRoute_(parameters.route);Object.keys(ATLAS_LEGACY_ROUTE_ALIASES).some(function(alias){if(String(parameters[alias]||'')==='1'||(alias==='traveler'&&parameters[alias])){route=ATLAS_LEGACY_ROUTE_ALIASES[alias];return true;}return false;});return route;}
-function atlasRouteTemplate_(route){return {home:'Index',customers:'Index',rfqs:'Index',quotes:'Index',jobs:'Index',invoices:'Index','sales-activity':'SalesActivity','follow-ups':'CalendarFollowUps','shop-floor':'ShopFloor','operations-dashboard':'OperationsDashboard','floor-board':'FloorBoard',ideas:'Ideas',admin:'AdminSettings',traveler:'Traveler'}[normalizeAtlasRoute_(route)]||'Index';}
+function atlasRouteTemplate_(route){return {home:'Index',customers:'Index',rfqs:'Index',quotes:'Index',jobs:'Index',invoices:'Index','sales-activity':'SalesActivity','follow-ups':'CalendarFollowUps','shop-floor':'ShopFloor','operations-dashboard':'OperationsDashboard','floor-board':'FloorBoard',ideas:'Ideas',admin:'AdminSettings','platform-commercial':'PlatformCommercial',traveler:'Traveler'}[normalizeAtlasRoute_(route)]||'Index';}
 function atlasRouteTitle_(route){var normalized=normalizeAtlasRoute_(route),found=ATLAS_ROUTE_REGISTRY.filter(function(item){return item.id===normalized;})[0];return (found?found.label:'Command Center')+' - Atlas';}
