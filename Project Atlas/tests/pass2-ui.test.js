@@ -4,12 +4,14 @@ const path = require('path');
 
 const root = path.join(__dirname, '..', 'appscript', 'src');
 const server = fs.readFileSync(path.join(root, 'UI', 'Code.gs'), 'utf8');
+const navigation = fs.readFileSync(path.join(root, 'Services', 'NavigationService.gs'), 'utf8');
 const dashboard = fs.readFileSync(path.join(root, 'UI', 'OperationsDashboard.html'), 'utf8');
 const traveler = fs.readFileSync(path.join(root, 'UI', 'Traveler.html'), 'utf8');
 
-assert.match(server, /createTemplateFromFile\('UI\/Index'\)/);
-assert.match(server, /createTemplateFromFile\('UI\/OperationsDashboard'\)/);
-assert.match(server, /createTemplateFromFile\('UI\/Traveler'\)/);
+assert.match(server, /createTemplateFromFile\('UI\/'\+template\)/);
+assert.match(navigation, /home:'Index'/);
+assert.match(navigation, /'operations-dashboard':'OperationsDashboard'/);
+assert.match(navigation, /traveler:'traveler'/);
 ['getShopDashboard', 'getShopOperatorWorkloads', 'getTravelerPrintData'].forEach((endpoint) => assert.match(server, new RegExp(endpoint + '\\s*\\(')));
 
 [dashboard, traveler].forEach((client) => {

@@ -4,13 +4,15 @@ const path = require('path');
 
 const root = path.join(__dirname, '..', 'appscript', 'src');
 const server = fs.readFileSync(path.join(root, 'UI', 'Code.gs'), 'utf8');
+const navigation = fs.readFileSync(path.join(root, 'Services', 'NavigationService.gs'), 'utf8');
 const shop = fs.readFileSync(path.join(root, 'UI', 'ShopFloor.html'), 'utf8');
 const traveler = fs.readFileSync(path.join(root, 'UI', 'Traveler.html'), 'utf8');
 
 // The administration screen is still the default; shop mode is an explicit
 // route so the existing MVP remains available.
-assert.match(server, /createTemplateFromFile\('UI\/Index'\)/);
-assert.match(server, /createTemplateFromFile\('UI\/ShopFloor'\)/);
+assert.match(server, /createTemplateFromFile\('UI\/'\+template\)/);
+assert.match(navigation, /home:'Index'/);
+assert.match(navigation, /'shop-floor':'ShopFloor'/);
 assert.match(server, /resolveShopJobByQr\s*\(/);
 assert.match(server, /getShopFloorJob\s*\(/);
 assert.match(server, /transitionShopFloorJob\s*\(/);

@@ -6,7 +6,8 @@ const root = path.join(__dirname, '..', 'appscript', 'src');
 const ui = fs.readFileSync(path.join(root, 'UI', 'Index.html'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'UI', 'Code.gs'), 'utf8');
 
-assert.match(server, /createTemplateFromFile\('UI\/Index'\)/);
+assert.match(server, /resolveAtlasRoute_\(e\)/);
+assert.match(server, /createTemplateFromFile\('UI\/'\+template\)/);
 assert.match(ui, /withSuccessHandler/g);
 assert.match(ui, /withFailureHandler/g);
 assert.ok((ui.match(/withSuccessHandler/g) || []).length >= 3, 'Every interactive server call needs a success handler.');
