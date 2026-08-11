@@ -10,24 +10,29 @@ function ShopFloorService_(dependencies) {
   this.checkpoint = dependencies.checkpoint || function () {};
 }
 
-ShopFloorService_.prototype.configureJob = function (jobId, workflowId, initialStatus) {
-  var job = this.jobs.get(jobId), workflow = getShopWorkflow_(workflowId);
-  var active = this.qrTokens.findActiveByJobId(jobId)[0];
-  if (active && active.workflowId === workflowId) return { job: this.toShopJob_(job, active), qrToken: active.id };
-  if (active) throw new VmosValidationError_('Job ' + jobId + ' already has an active QR token. Reprint its existing traveler instead of creating another token.');
-  if (workflow.states.indexOf(String(job.status || '').toUpperCase()) === -1) {
-    var assignedStatus = String(initialStatus || '').toUpperCase();
-    if (workflow.states.indexOf(assignedStatus) === -1) throw new VmosValidationError_('Select an initial ' + workflow.label + ' status for this job.');
-    this.jobs.update(jobId, { status: assignedStatus });
-    this.appendEvent_(job, { eventType: 'WORKFLOW_ASSIGNED', previousStatus: job.status, newStatus: assignedStatus, workflowId: workflowId, notes: 'Workflow assigned for shop-floor control.' });
-    job = this.jobs.get(jobId);
-  }
-  var token = this.tokenGenerator();
-  if (!isValidOpaqueJobQrToken_(token)) throw new VmosConfigurationError_('Secure QR token generation failed. No token was created.');
-  var record = this.qrTokens.create({ id: token, jobId: jobId, workflowId: workflowId, createdAt: this.clock(), createdBy: this.auditUser() });
-  this.appendEvent_(job, { eventType: 'QR_ASSIGNED', workflowId: workflowId, notes: 'Shop-floor QR identifier assigned.' });
-  return { job: this.toShopJob_(job, record), qrToken: record.id };
+ShopFloorService_.prototype.configureJob = function (jobId, workflowId, initialStatus, correlationId) {
+  var self=this;correlationId=correlationId||'';
+  return this.withConfigurationLock_(function(){
+    var job=self.jobs.get(jobId),originalStatus=job.status,workflow=getShopWorkflow_(workflowId),requiredEvents=[];
+    var active=self.qrTokens.findActiveByJobId(jobId)[0];
+    if(active&&active.workflowId===workflowId)return {job:self.toShopJob_(job,active),qrToken:active.id};
+    if(active)throw new VmosValidationError_('Job '+jobId+' already has an active QR token. Reprint its existing traveler instead of creating another token.');
+    if(workflow.states.indexOf(String(job.status||'').toUpperCase())===-1){
+      var assignedStatus=String(initialStatus||'').toUpperCase();
+      if(workflow.states.indexOf(assignedStatus)===-1)throw new VmosValidationError_('Select an initial '+workflow.label+' status for this job.');
+      self.jobs.update(jobId,{status:assignedStatus});requiredEvents.push('WORKFLOW_ASSIGNED');job=self.jobs.get(jobId);
+    }
+    var token=self.tokenGenerator();
+    if(!isValidOpaqueJobQrToken_(token))throw new VmosConfigurationError_('Secure QR token generation failed. No token was created.');
+    var record=self.qrTokens.create({id:token,jobId:jobId,workflowId:workflowId,createdAt:self.clock(),createdBy:self.auditUser()});
+    requiredEvents.push('QR_ASSIGNED');
+    self.checkpoint({id:job.id,status:job.status},{eventTypes:requiredEvents,workflowId:workflowId,workflowVersion:'1',previousStatus:originalStatus,assignedStatus:job.status,qrTokenFingerprint:shopFloorTokenFingerprint_(record.id)});
+    if(requiredEvents.indexOf('WORKFLOW_ASSIGNED')!==-1)self.appendEvent_(job,{eventType:'WORKFLOW_ASSIGNED',previousStatus:originalStatus,newStatus:job.status,workflowId:workflowId,notes:'Workflow assigned for shop-floor control.',commandId:correlationId});
+    self.appendEvent_(job,{eventType:'QR_ASSIGNED',workflowId:workflowId,notes:'Shop-floor QR identifier assigned.',commandId:correlationId});
+    return {job:self.toShopJob_(job,record),qrToken:record.id};
+  });
 };
+ShopFloorService_.prototype.withConfigurationLock_=function(operation){var lock=LockService.getScriptLock();lock.waitLock(30000);try{return operation();}finally{lock.releaseLock();}};
 
 ShopFloorService_.prototype.resolveByQr = function (token) {
   var record = this.activeQr_(token), job = this.jobs.get(record.jobId);

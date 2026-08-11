@@ -7,6 +7,7 @@ function SecurityOperationRecoveryService_(dependencies){
   this.ideaEvents=dependencies.ideaEvents||(typeof IdeaEventRepository_!=='undefined'?new IdeaEventRepository_():null);
   this.jobs=dependencies.jobs||new MvpService_('Job');
   this.jobEvents=dependencies.jobEvents||new JobEventRepository_();
+  this.qrTokens=dependencies.qrTokens||(typeof JobQrTokenRepository_!=='undefined'?new JobQrTokenRepository_():null);
   this.ledger=dependencies.ledger||new SecurityAuditService_({repository:this.securityEvents});
   this.clock=dependencies.clock||function(){return new Date();};
   this.lock=dependencies.lock||(typeof LockService!=='undefined'?LockService.getScriptLock():null);
@@ -45,6 +46,7 @@ SecurityOperationRecoveryService_.prototype.claim_=function(record,recoveryConte
 }.bind(this));};
 
 SecurityOperationRecoveryService_.prototype.probe_=function(record){
+  if(record.recoveryType==='SHOP_FLOOR_DOMAIN_EVENT'&&record.operation==='configureShopFloorJob')return this.probeShopFloor_(record);
   if(String(record.mutationState||'').toUpperCase()==='CANONICAL_COMPLETED')return {outcome:'COMPLETED'};
   if(record.recoveryType==='FOLLOW_UP_DOMAIN_EVENT')return this.probeFollowUp_(record);
   if(record.recoveryType==='IDEA_DOMAIN_EVENT')return this.probeIdea_(record);
@@ -77,9 +79,21 @@ SecurityOperationRecoveryService_.prototype.probeIdea_=function(record){
 SecurityOperationRecoveryService_.prototype.probeShopFloor_=function(record){
   if(!record.resourceId)return {outcome:'UNCERTAIN'};
   var context=this.context_(record),commandId=context.commandId||record.idempotencyKey;
+  if(record.operation==='configureShopFloorJob')return this.probeShopFloorConfiguration_(record,context);
   if(this.jobEvents.listByJobId(record.resourceId).some(function(event){return String(event.commandId)===String(commandId);}))return {outcome:'COMPLETED'};
   this.jobs.get(record.resourceId);
   return {outcome:'UNCERTAIN'};
+};
+
+SecurityOperationRecoveryService_.prototype.probeShopFloorConfiguration_=function(record,context){
+  if(!this.qrTokens||!context.workflowId||!context.qrTokenFingerprint||!Array.isArray(context.eventTypes))return {outcome:'UNCERTAIN'};
+  var allowed=['WORKFLOW_ASSIGNED','QR_ASSIGNED'];
+  if(context.eventTypes.indexOf('QR_ASSIGNED')===-1||context.eventTypes.some(function(type,index,values){return allowed.indexOf(type)===-1||values.indexOf(type)!==index;}))return {outcome:'UNCERTAIN'};
+  var job=this.jobs.get(record.resourceId),tokens=this.qrTokens.listByJobId?this.qrTokens.listByJobId(record.resourceId):this.qrTokens.list().filter(function(item){return String(item.jobId)===String(record.resourceId);});
+  var token=tokens.filter(function(item){return String(item.workflowId)===String(context.workflowId)&&shopFloorTokenFingerprint_(item.id)===String(context.qrTokenFingerprint);})[0];
+  if(!token)return {outcome:'UNCERTAIN'};
+  if(context.eventTypes.indexOf('WORKFLOW_ASSIGNED')!==-1&&String(job.status)!==String(context.assignedStatus))return {outcome:'UNCERTAIN'};
+  return {outcome:'COMPLETED'};
 };
 
 SecurityOperationRecoveryService_.prototype.recoverRecord_=function(record,recoveryContext){
@@ -108,11 +122,25 @@ SecurityOperationRecoveryService_.prototype.recoverIdeaEvent_=function(record,re
 SecurityOperationRecoveryService_.prototype.eventTypeFor_=function(operation){return {createFollowUp:'CREATED',completeFollowUp:'COMPLETED',cancelFollowUp:'CANCELLED',scheduleFollowUp:'SCHEDULED',rescheduleFollowUp:'RESCHEDULED',reassignFollowUp:'REASSIGNED'}[operation]||'';};
 
 SecurityOperationRecoveryService_.prototype.recoverShopFloorEvent_=function(record,recoveryContext){return this.withLock_(function(){
+  if(record.operation==='configureShopFloorJob')return this.recoverShopFloorConfigurationEvents_(record,recoveryContext);
   var context=this.context_(record),commandId=context.commandId||record.idempotencyKey,existing=this.jobEvents.listByJobId(record.resourceId).filter(function(event){return String(event.commandId)===String(commandId);})[0],job=this.jobs.get(record.resourceId);
   if(existing)return job;
   this.jobEvents.append({id:'EVT-RECOVERY-'+record.id,jobId:job.id,eventType:context.eventType||'RECOVERED_OPERATION',occurredAt:record.occurredAt||this.clock(),actor:record.userId,previousStatus:'',newStatus:job.status||context.targetStatus||'',notes:'Recovered append-only audit event by '+String(recoveryContext.actor||'SYSTEM:SECURITY_OPERATION_RECOVERY')+'.',workflowId:'',workflowVersion:'1',commandId:commandId});
   return job;
 }.bind(this));};
+
+SecurityOperationRecoveryService_.prototype.recoverShopFloorConfigurationEvents_=function(record,recoveryContext){
+  var context=this.context_(record),probe=this.probeShopFloorConfiguration_(record,context);
+  if(probe.outcome!=='COMPLETED')throw new VmosError_('Shop-floor configuration changed before recovery. Review is required.','CONFLICT');
+  var self=this,events=this.jobEvents.listByJobId(record.resourceId),job=this.jobs.get(record.resourceId),commandId=record.correlationId;
+  context.eventTypes.forEach(function(eventType){
+    var exists=events.some(function(event){return String(event.commandId)===String(commandId)&&String(event.eventType)===String(eventType);});
+    if(exists)return;
+    self.jobEvents.append({id:'EVT-RECOVERY-'+record.id+'-'+eventType,jobId:job.id,eventType:eventType,occurredAt:record.mutationAt||record.occurredAt||self.clock(),actor:record.userId,previousStatus:eventType==='WORKFLOW_ASSIGNED'?context.previousStatus:'',newStatus:eventType==='WORKFLOW_ASSIGNED'?context.assignedStatus:'',notes:(eventType==='WORKFLOW_ASSIGNED'?'Workflow assigned for shop-floor control.':'Shop-floor QR identifier assigned.')+' Recovered by '+String(recoveryContext.actor||'SYSTEM:SECURITY_OPERATION_RECOVERY')+'.',workflowId:context.workflowId,workflowVersion:context.workflowVersion||'1',commandId:commandId});
+    events.push({eventType:eventType,commandId:commandId});
+  });
+  return job;
+};
 
 SecurityOperationRecoveryService_.prototype.context_=function(record){try{return JSON.parse(record.recoveryJson||'{}');}catch(ignored){return {};}};
 SecurityOperationRecoveryService_.prototype.isLeaseExpired_=function(record){var seconds=Number(record.leaseSeconds||120),expires=record.leaseExpiresAt||new Date(new Date(record.lastAttemptAt||record.occurredAt||0).getTime()+seconds*1000);return new Date(expires).getTime()<=new Date(this.clock()).getTime();};

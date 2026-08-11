@@ -14,7 +14,7 @@ const TOKEN_A = '11111111222243338444555555555555';
 const TOKEN_B = 'aaaaaaaa55554555b555cccccccccccc';
 const context = vm.createContext({
   console, Date, JSON, String, Number, Error, Object, Array, isNaN,
-  Utilities: { getUuid: () => '11111111-2222-4333-8444-555555555555' },
+  Utilities: { getUuid: () => '11111111-2222-4333-8444-555555555555', DigestAlgorithm:{SHA_256:'SHA_256'}, Charset:{UTF_8:'UTF_8'}, computeDigest:value=>Array.from({length:32},(_,index)=>(String(value).charCodeAt(index%String(value).length)||0)+index) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: (name) => name === 'VMOS_QR_IMAGE_ENDPOINT' ? 'https://qr.example.invalid/?data=' : null }) },
   ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/example/exec' }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }

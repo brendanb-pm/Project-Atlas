@@ -35,9 +35,16 @@ JobQrTokenRepository_.prototype.findActiveByJobId = function (jobId) {
     return String(record.jobId) === String(jobId) && !record.revokedAt;
   });
 };
+JobQrTokenRepository_.prototype.listByJobId = function (jobId) {
+  return this.list().filter(function (record) { return String(record.jobId) === String(jobId); });
+};
 
 /** A token contains no job/customer information and is safe to place in a QR URL. */
 function generateOpaqueJobQrToken_() {
   return Utilities.getUuid().replace(/-/g, '').toLowerCase();
 }
 function isValidOpaqueJobQrToken_(token) { return /^[a-f0-9]{32}$/.test(String(token || '')); }
+function shopFloorTokenFingerprint_(token) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token || ''), Utilities.Charset.UTF_8);
+  return bytes.map(function (value) { var normalized=value<0?value+256:value; return ('0'+normalized.toString(16)).slice(-2); }).join('');
+}
