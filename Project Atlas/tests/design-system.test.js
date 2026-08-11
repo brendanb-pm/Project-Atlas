@@ -1,0 +1,28 @@
+const assert=require('assert'),fs=require('fs'),path=require('path');
+const uiRoot=path.join(__dirname,'..','appscript','src','UI');
+const design=fs.readFileSync(path.join(uiRoot,'AtlasDesignSystem.html'),'utf8');
+const frame=fs.readFileSync(path.join(uiRoot,'NavigationFrame.html'),'utf8');
+const routed=['Index.html','SalesActivity.html','CalendarFollowUps.html','ShopFloor.html','OperationsDashboard.html','Ideas.html','Traveler.html'];
+
+['--atlas-font','--atlas-space-1','--atlas-content','--atlas-border','--atlas-accent','--atlas-focus','--atlas-success','--atlas-warning','--atlas-danger','--atlas-info','--atlas-disabled','--atlas-selected'].forEach(token=>assert.ok(design.includes(token),'shared design token '+token));
+['atlas-button--primary','atlas-button--secondary','atlas-button--quiet','atlas-button--danger','atlas-status--pending','atlas-status--blocked','atlas-status--success','atlas-notice--error','atlas-empty','atlas-loading','atlas-dialog','atlas-table-wrap','atlas-metric'].forEach(contract=>assert.ok(design.includes(contract),'shared component '+contract));
+assert.match(design,/min-height:var\(--atlas-touch\)/,'shared controls use the touch target token');
+assert.match(design,/:focus-visible/,'shared focus remains visible');
+assert.match(design,/@media\(max-width:1024px\)/,'tablet landscape contract');
+assert.match(design,/@media\(max-width:768px\)/,'tablet portrait contract');
+assert.match(design,/@media\(max-width:480px\)/,'390px mobile contract');
+assert.match(design,/@media\(min-width:1600px\)/,'large display contract');
+assert.match(design,/@media\(prefers-reduced-motion:reduce\)/,'reduced motion contract');
+assert.match(design,/role',tone==='error'\?'alert':'status'/,'notifications distinguish alert and status semantics');
+assert.match(design,/aria-invalid/,'field error association contract');
+assert.doesNotMatch(design,/VMOS|Vitality/i,'shared design system remains tenant neutral');
+routed.forEach(file=>assert.ok(fs.readFileSync(path.join(uiRoot,file),'utf8').includes("includeAtlasUi_('UI/AtlasDesignSystem')"),file+' consumes the shared foundation'));
+assert.match(frame,/atlas-current-location/,'shared frame exposes current location');
+assert.match(frame,/aria-current/,'shared frame exposes active navigation state');
+assert.match(frame,/data-atlas-product/,'shared frame retains configured tenant branding hook');
+const index=fs.readFileSync(path.join(uiRoot,'Index.html'),'utf8');
+assert.match(index,/tabindex="0" aria-label="Scrollable/,'narrow table has a keyboard-operable scroll region');
+const sales=fs.readFileSync(path.join(uiRoot,'SalesActivity.html'),'utf8');
+assert.match(sales,/>Log Activity</,'form primary action uses a business verb');
+assert.match(sales,/button secondary save/,'follow-up queue is visually subordinate');
+console.log('Atlas design-system contract tests passed');
