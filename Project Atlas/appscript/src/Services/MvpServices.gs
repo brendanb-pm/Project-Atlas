@@ -1,6 +1,8 @@
 function MvpService_(entityName, dependencies) { dependencies=dependencies||{}; this.entityName = entityName; this.config = getVmosConfig_(); this.definition = this.config.mapping[entityName]; this.repository = dependencies.repository||createRepository_(entityName); this.auditUser=dependencies.auditUser||getVmosAuditUser_; this.mutationProof=dependencies.mutationProof||null; }
 MvpService_.prototype.list = function () { return this.repository.list(); };
 MvpService_.prototype.get = function (id) { return this.repository.findById(id); };
+MvpService_.prototype.findFirstByField = function (field, value) { var criteria={};criteria[field]=value;if(this.repository.findFirstByFields)return this.repository.findFirstByFields(criteria);return this.list().filter(function(row){return String(row[field])===String(value);})[0]; };
+MvpService_.prototype.listByField = function (field, value, limit) { var maximum=Math.min(100,Math.max(1,Number(limit||25)));return this.list().filter(function(row){return String(row[field])===String(value);}).slice(0,maximum); };
 MvpService_.prototype.update = function (id, changes) {
   if (!id) throw new VmosValidationError_('Record ID is required.');
   changes = changes || {};

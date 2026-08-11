@@ -52,7 +52,11 @@ assert.equal(noCapabilities.accessState,'LIMITED_ACCESS','empty trusted capabili
 assert.equal(context.resolveAtlasRoute_({parameter:{sales:'1'}}),'sales-activity');
 assert.equal(context.resolveAtlasRoute_({parameter:{calendar:'1'}}),'follow-ups');
 assert.equal(context.resolveAtlasRoute_({parameter:{route:'jobs'}}),'jobs');
-assert.equal(context.atlasRouteTemplate_('customers'),'Index');
+assert.equal(context.atlasRouteTemplate_('customers'),'CommercialWorkflow');
+assert.equal(context.atlasRouteTemplate_('rfqs'),'CommercialWorkflow');
+assert.equal(context.atlasRouteTemplate_('quotes'),'CommercialWorkflow');
+assert.equal(context.atlasRouteTemplate_('jobs'),'CommercialWorkflow');
+assert.equal(context.atlasRouteTemplate_('invoices'),'CommercialWorkflow');
 assert.equal(context.atlasRouteTemplate_('follow-ups'),'CalendarFollowUps');
 assert.equal(context.atlasRouteTemplate_('unknown'),'Index');
 
