@@ -12,7 +12,7 @@ function fixture(overrides={}){
   return new context.AtlasAuthorizationService_({
     config:{mode:overrides.mode||'ENFORCED',tenantId:overrides.tenantId===undefined?'TENANT-A':overrides.tenantId},
     principals:{resolve(){if(principal instanceof Error)throw principal;return principal;}},
-    identities:{findActive(provider,subject){return provider==='GOOGLE_WORKSPACE'&&subject==='operator@example.com'?{userId:'USR-1'}:undefined;}},
+    identities:{findActive(provider,subject){if(overrides.identity===null)return undefined;return provider==='GOOGLE_WORKSPACE'&&subject==='operator@example.com'?(overrides.identity||{userId:'USR-1'}):undefined;}},
     users:{get(id){return overrides.user===undefined?{id,status:'ACTIVE'}:overrides.user;}},
     memberships:{findActive(tenant,user){return membership&&membership.tenantId===tenant&&membership.userId===user&&membership.status==='ACTIVE'?membership:undefined;}},
     entitlements:overrides.entitlements||{assertAllowed(){}},clock:()=>new Date('2026-08-10T12:00:00Z'),uuid:()=> '1234'
@@ -26,7 +26,9 @@ assert.throws(()=>fixture({principal:null}).execute('SALES_WRITE','x',()=>{}),e=
 assert.throws(()=>fixture({principal:new context.VmosAuthorizationError_()}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({tenantId:''}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({user:{id:'USR-1',status:'INACTIVE'}}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
+assert.throws(()=>fixture({identity:null}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({membership:null}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
+assert.throws(()=>fixture({membership:{id:'M-I',tenantId:'TENANT-A',userId:'USR-1',status:'INACTIVE',roles:'["ADMIN"]'}}).execute('CORE_RECORD_READ','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture().execute('FINANCE_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({membership:{id:'M-X',tenantId:'TENANT-B',userId:'USR-1',status:'ACTIVE',roles:'["ADMIN"]'}}).execute('CORE_RECORD_READ','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
 assert.throws(()=>fixture({entitlements:{assertAllowed(){throw new context.VmosAuthorizationError_();}}}).execute('SALES_WRITE','x',()=>{}),e=>e.code==='AUTHORIZATION_ERROR');
@@ -44,11 +46,15 @@ context.getVmosAuditUser_=()=> 'legacy@example.com';
 let validationContext;
 assert.equal(validation.execute('SALES_WRITE','legacy',ctx=>{validationContext=ctx;return true;}),true);
 assert.equal(validationContext.authoritative,false);
+assert.deepEqual(Array.from(validationContext.capabilities),[],'VALIDATION fallback never fabricates capabilities');
 const disabled=fixture({mode:'DISABLED_FOR_DEVELOPMENT'}); let disabledContext;
 disabled.execute('ADMIN_IDENTITY','dev',ctx=>{disabledContext=ctx;}); assert.equal(disabledContext.authoritative,false);
+assert.deepEqual(Array.from(disabledContext.capabilities),[],'development fallback never fabricates ADMIN access');
 
 assert.deepEqual(Array.from(context.ATLAS_DEFAULT_ROLE_CAPABILITIES.SHOP_OPERATOR),['CORE_RECORD_READ','OPERATIONS_READ','SHOP_FLOOR_OPERATE']);
 assert.ok(context.ATLAS_DEFAULT_ROLE_CAPABILITIES.ADMIN.includes('ADMIN_IDENTITY'));
+assert.equal(fixture({membership:{id:'M-U',tenantId:'TENANT-A',userId:'USR-1',status:'ACTIVE',roles:'["UNKNOWN_ROLE"]'}}).execute(null,'read',ctx=>ctx.capabilities.length),0,'unrecognized roles grant no capabilities');
+assert.equal(fixture({membership:{id:'M-A',tenantId:'TENANT-A',userId:'USR-1',status:'ACTIVE',roles:'["ADMIN"]'}}).execute('ADMIN_CONFIG','admin',ctx=>ctx.capabilities.length),Object.keys(context.ATLAS_CAPABILITIES).length,'ADMIN maps to the current explicit capability registry');
 assert.throws(()=>context.createTrustedSystemAuditContext_('CALENDAR_RECONCILIATION','ADMIN_IDENTITY'),e=>e.code==='AUTHORIZATION_ERROR');
 assert.equal(context.ATLAS_IDENTITY_MAPPINGS.AtlasUser.sheetName,'AtlasUsers');
 assert.deepEqual(Array.from(context.ATLAS_IDENTITY_MAPPINGS.TenantMembership.fields.roles),['Roles JSON']);

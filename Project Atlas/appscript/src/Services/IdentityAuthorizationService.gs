@@ -74,10 +74,10 @@ AtlasAuthorizationService_.prototype.capabilitiesFor_ = function (membership) {
 };
 AtlasAuthorizationService_.prototype.context_ = function (values) {
   return Object.freeze({userId:values.userId,tenantId:values.tenantId,principalType:values.principal.type,principalSubject:values.principal.subject,
-    operation:values.operationName,correlationId:'AUTH-'+this.uuid(),occurredAt:this.clock(),actorType:values.kind,authoritative:values.authoritative===true,capabilities:Object.freeze((values.capabilities||Object.keys(ATLAS_CAPABILITIES)).slice())});
+    operation:values.operationName,correlationId:'AUTH-'+this.uuid(),occurredAt:this.clock(),actorType:values.kind,authoritative:values.authoritative===true,capabilities:Object.freeze((values.capabilities||[]).slice())});
 };
 AtlasAuthorizationService_.prototype.legacyContext_ = function (operationName,kind) {
-  var actor=getVmosAuditUser_(); return this.context_({userId:actor,tenantId:this.config.tenantId||'DEVELOPMENT_UNSCOPED',principal:{type:'LEGACY_DEVELOPMENT',subject:actor},operationName:operationName,authoritative:false,kind:kind||'DEVELOPMENT_UNENFORCED'});
+  var actor=getVmosAuditUser_(); return this.context_({userId:actor,tenantId:this.config.tenantId||'DEVELOPMENT_UNSCOPED',principal:{type:'LEGACY_DEVELOPMENT',subject:actor},operationName:operationName,authoritative:false,kind:kind||'DEVELOPMENT_UNENFORCED',capabilities:[]});
 };
 AtlasAuthorizationService_.prototype.logValidation_ = function (error,operationName) { try{console.warn(JSON.stringify({event:'IDENTITY_VALIDATION_WOULD_DENY',operation:operationName,reason:error.code||'AUTHORIZATION_ERROR'}));}catch(ignored){} };
 

@@ -47,6 +47,11 @@ assert.equal(zeroCapability.accessState,'NO_APPLICABLE_CAPABILITIES');
 assert.deepEqual(Array.from(zeroCapability.attention),[],'zero capability is a valid, explicit payload rather than a transport failure');
 const validationContext=new context.CommandCenterWorkspaceService_({clock:()=>now}).get({userId:'legacy',tenantId:'TENANT-1',authoritative:false,capabilities:[]});
 assert.equal(validationContext.accessState,'IDENTITY_VALIDATION_REQUIRED');
+let disabledCalendarReads=0;
+const calendarDisabled=new context.CommandCenterWorkspaceService_({calendarState:()=> 'DISABLED',calendarRequests:{list(){disabledCalendarReads++;return[];}},clock:()=>now}).get({userId:'USER-1',tenantId:'TENANT-1',authoritative:true,capabilities:['CALENDAR_RECONCILE']});
+assert.equal(calendarDisabled.sourceStates.calendarReview,'DISABLED');
+assert.equal(disabledCalendarReads,0,'disabled calendar does not probe its reconciliation store');
+assert.equal(calendarDisabled.unavailable.length,0,'disabled calendar is not reported as a runtime failure');
 
 const partial=new context.CommandCenterWorkspaceService_({followUps:{list(){throw new Error('sheet details');}},jobs:list([],[],'jobs'),rfqs:list([],[],'rfqs'),quotes:list([],[],'quotes'),customers:list([],[],'customers'),invoices:list([],[],'invoices'),purchases:list([],[],'purchases'),calendarRequests:list([],[],'calendar'),clock:()=>now}).get({userId:'USER-1',tenantId:'TENANT-1',capabilities:['FOLLOWUP_READ']});
 assert.equal(partial.unavailable[0].section,'Follow-Ups');

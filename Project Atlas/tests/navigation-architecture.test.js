@@ -36,6 +36,11 @@ const operatorIds=Array.from(operator.groups).flatMap(group=>Array.from(group.it
 assert(operatorIds.includes('jobs')&&operatorIds.includes('shop-floor')&&operatorIds.includes('operations-dashboard'));
 assert(!operatorIds.includes('customers'));
 
+const financeModel=service.getModel({capabilities:['CORE_RECORD_READ','FINANCE_READ','FINANCE_WRITE','PURCHASE_REQUEST']},'home');
+const financeIds=Array.from(financeModel.groups).flatMap(group=>Array.from(group.items).map(item=>item.id));
+assert(financeIds.includes('customers')&&financeIds.includes('invoices'));
+assert(!financeIds.includes('sales-activity')&&!financeIds.includes('shop-floor'));
+
 const admin=service.getModel({capabilities:['CORE_RECORD_READ','SALES_READ','FOLLOWUP_READ','RFQ_READ','OPERATIONS_READ','FINANCE_READ','ADMIN_CONFIG']},'home');
 const adminIds=Array.from(admin.groups).flatMap(group=>Array.from(group.items).map(item=>item.id));
 ['customers','sales-activity','follow-ups','rfqs','quotes','jobs','shop-floor','operations-dashboard','invoices','ideas'].forEach(id=>assert(adminIds.includes(id),'authorized Owner/Admin navigation includes '+id));

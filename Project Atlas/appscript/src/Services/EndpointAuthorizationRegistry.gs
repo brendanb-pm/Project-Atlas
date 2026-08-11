@@ -2,6 +2,7 @@
 var ATLAS_CALLABLE_ENDPOINTS = {
   getAtlasNavigation:{kind:'READ',capability:null},
   getCommandCenterWorkspace:{kind:'READ',capability:null},
+  getAtlasActivationHealth:{kind:'READ',capability:'ADMIN_CONFIG'},
   createSalesActivity:{kind:'WRITE',capability:'SALES_WRITE'}, updateSalesActivity:{kind:'WRITE',capability:'SALES_WRITE'},
   getSalesActivityTimeline:{kind:'READ',capability:'SALES_READ'}, getSalesFollowUpQueue:{kind:'READ',capability:'SALES_READ'},
   getSalesAccountHealth:{kind:'READ',capability:'SALES_READ'}, getSalesActivityMetrics:{kind:'READ',capability:'SALES_READ'},
