@@ -27,6 +27,7 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   getUndepositedPaymentSummary:{kind:'READ',capability:'FINANCE_READ'}, submitPurchaseRequest:{kind:'WRITE',capability:'PURCHASE_REQUEST'},
   approvePurchaseRequest:{kind:'HIGH_RISK_WRITE',capability:'PURCHASE_APPROVE'}, recordPurchaseReceipt:{kind:'HIGH_RISK_WRITE',capability:'PURCHASE_REQUEST'},
   initializeIdeasPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'}, initializeShopOperationalPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'},
+  initializeFollowUpPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'}, initializePurchaseApprovalPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'},
   doGet:{kind:'READ_ONLY',capability:null}
 };
 var ATLAS_MVP_ENTITY_CAPABILITIES={Customer:{read:'CORE_RECORD_READ',write:'CORE_RECORD_WRITE'},RFQ:{read:'RFQ_READ',write:'RFQ_WRITE'},Quote:{read:'RFQ_READ',write:'QUOTE_WRITE'},Job:{read:'OPERATIONS_READ',write:'OPERATIONS_WRITE'},Invoice:{read:'FINANCE_READ',write:'FINANCE_WRITE'}};
@@ -38,7 +39,8 @@ var ATLAS_MUTATION_RECOVERY = {
   configureShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',transitionShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',reportJobProblem:'DOMAIN_SPECIFIC_RECOVERY',resolveJobBlock:'DOMAIN_SPECIFIC_RECOVERY',
   captureIdea:'DOMAIN_SPECIFIC_RECOVERY',requestIdeaPromotion:'DOMAIN_SPECIFIC_RECOVERY',recordProcessTrial:'PREALLOCATED_RESOURCE_ID',
   recordCashReceipt:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',depositCashReceipt:'EXPLICIT_REVIEW',submitPurchaseRequest:'PREALLOCATED_RESOURCE_ID',approvePurchaseRequest:'EXPLICIT_REVIEW',recordPurchaseReceipt:'EXPLICIT_REVIEW',
-  initializeIdeasPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',initializeShopOperationalPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION'
+  initializeIdeasPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',initializeShopOperationalPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',
+  initializeFollowUpPersistence:'EXPLICIT_REVIEW',initializePurchaseApprovalPersistence:'EXPLICIT_REVIEW'
 };
 function getMvpEntityCapability_(entity,access) {var policy=ATLAS_MVP_ENTITY_CAPABILITIES[entity];if(!policy)throw new VmosValidationError_('Unsupported entity.');return policy[access];}
 function securityOperationOptions_(operation,resourceType,resourceId,parts,recoveryType,recoveryContext){var serialized=JSON.stringify(parts||{}),bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,serialized,Utilities.Charset.UTF_8),digest=bytes.map(function(value){var normalized=value<0?value+256:value;return ('0'+normalized.toString(16)).slice(-2);}).join('');return {idempotencyKey:operation+':'+digest,requestFingerprint:digest,resourceType:resourceType||'',resourceId:resourceId||'',recoveryType:recoveryType||'',recoveryContext:recoveryContext||{}};}

@@ -15,15 +15,16 @@
  * Updated By, Security Operation ID, Security Operation Fingerprint,
  * Security Tenant ID, Security Actor ID.
  */
+var VMOS_PURCHASE_APPROVAL_FIELDS = ['id', 'requestDate', 'requester', 'vendor', 'category', 'classification', 'businessJustification', 'expectedRoiNeed', 'description', 'amount', 'actualPurchaseAmount', 'status', 'approvalRequired', 'approver', 'approvedAt', 'receiptReference', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'securityOperationId', 'securityOperationFingerprint', 'securityTenantId', 'securityActorId'];
+
 function getPurchaseApprovalConfig_() {
   var properties = PropertiesService.getScriptProperties();
   var rawMapping = properties.getProperty('VMOS_PURCHASE_APPROVAL_MAPPING');
   if (!rawMapping) throw new VmosConfigurationError_('VMOS_PURCHASE_APPROVAL_MAPPING is not configured. Purchase approvals are disabled; no sheet was changed.');
   var mapping;
   try { mapping = JSON.parse(rawMapping); } catch (error) { throw new VmosConfigurationError_('VMOS_PURCHASE_APPROVAL_MAPPING must be valid JSON.'); }
-  var requiredFields = ['id', 'requestDate', 'requester', 'vendor', 'category', 'classification', 'businessJustification', 'expectedRoiNeed', 'description', 'amount', 'actualPurchaseAmount', 'status', 'approvalRequired', 'approver', 'approvedAt', 'receiptReference', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'securityOperationId', 'securityOperationFingerprint', 'securityTenantId', 'securityActorId'];
   if (!mapping || !mapping.sheetName || !mapping.fields || !mapping.idField) throw new VmosConfigurationError_('Purchase approval mapping requires sheetName, idField, and fields.');
-  requiredFields.forEach(function (field) {
+  VMOS_PURCHASE_APPROVAL_FIELDS.forEach(function (field) {
     if (!Array.isArray(mapping.fields[field]) || !mapping.fields[field].length) throw new VmosConfigurationError_('Purchase approval mapping is missing field "' + field + '".');
   });
   var rawThreshold = properties.getProperty('VMOS_PURCHASE_APPROVAL_THRESHOLD');
