@@ -16,14 +16,16 @@ Authentication proves a principal, membership establishes tenant access, capabil
 - `AtlasEntitlement`: explicit tenant/subscription grant for `PRODUCT`, `MODULE`, or `SEAT`, with quantity/state/effective period and optional audited override. Stable keys are not UI labels.
 - `AtlasSeatAssignment`: auditable tenant/user occupation under the selected seat policy. It is not identity or membership.
 - `AtlasCommercialAuditEvent`: append-only actor/system attribution for every commercial change and reconciliation.
+- `AtlasTenantInvitation`: pending tenant-scoped invitation and approved role intent; it does not authenticate a user or consume a seat before acceptance.
+- `AtlasInvoiceSnapshot`: immutable normalized provider-owned invoice/payment facts and safe references used for tenant history without storing payment credentials.
 
-Separate invoice/payment facts remain provider references until a provider-independent need justifies canonical records. Usage metering is deferred until a measured product component requires it.
+Invoice/payment facts are immutable normalized snapshots of provider-authoritative data plus safe references; Atlas does not calculate authoritative tax, total, or payment state. Usage metering is deferred until a measured product component requires it.
 
 ## Tenant and seat policy
 
 A tenant is not an email/Workspace domain, user, membership, workbook, deployment URL, billing organization, or provider customer. Membership remains explicit, supporting multiple domains, facilities, external consultants, invited users, and multiple tenants per billing organization.
 
-Initial recommended seat policy is `ASSIGNED_ACTIVE_MEMBERSHIP`: count active human TenantMemberships occupying a seat assignment. Exclude invited/unaccepted, inactive/disabled, trusted system/service/provider identities, calendar identities, and restricted non-human kiosk principals. Platform-support access is separately authorized and not silently billable. Record assignment changes so entitled, assigned, billable, available/overage, occupant, and next-period estimate are explainable. Over-entitlement produces an attention state; it never deletes or silently deactivates users.
+Initial seat policy is `PURCHASED_ACTIVE_HUMAN_ASSIGNMENTS`: purchased/contracted seats are the commercial quantity; count active human TenantMemberships with an active seat assignment as assigned/in use. Exclude invited/unaccepted, inactive/disabled, trusted system/service/provider identities, calendar identities, and restricted non-human kiosk principals. Platform-support access is separately authorized and not silently billable. Record assignment changes so plan cap, purchased, assigned/billable, available/overage, and occupants are explainable. Over-entitlement produces an attention state; it never deletes or silently deactivates users. Pending invitations consume no seat; acceptance requires confirmed available capacity and never purchases a seat silently.
 
 ## Commercial lifecycle
 
@@ -31,8 +33,10 @@ Initial recommended seat policy is `ASSIGNED_ACTIVE_MEMBERSHIP`: count active hu
 |---|---|
 | `TRIAL` | Entitled operations within trial scope; tenant admin sees end date/remediation. |
 | `ACTIVE` | Normal entitled access. |
+| `PAYMENT_PENDING` | Preserve last reconciled access and show pending state. |
+| `PAYMENT_FAILED` | Show remediation and attention; do not infer destructive lockout. |
 | `PAST_DUE` | Do not infer immediate lockout; show billing attention while policy/reconciliation decides grace. |
-| `GRACE_PERIOD` | Normal or risk-adjusted writes per approved policy; admin/export/remediation remain available. |
+| `GRACE` | Normal or risk-adjusted writes per approved policy; admin/export/remediation remain available. |
 | `SUSPENDED` | Default business writes denied; safe reads, export, tenant admin, and billing remediation preserved unless a legal/security hold requires stricter policy. |
 | `CANCELLED` | No new entitled writes after effective end; safe read/export/admin retention policy remains explicit. |
 
@@ -44,7 +48,7 @@ Plan versions may include Atlas Core, seat quantity, and module entitlements suc
 
 ## Administration planes
 
-Tenant Admin manages its own users, memberships, entitled-module configuration, integrations, and workflows through `ADMIN_CONFIG` / `ADMIN_IDENTITY`. Atlas Platform Admin manages tenants, plan versions, subscriptions, commercial states, seats, module grants, and overrides through a distinct trusted platform-principal boundary. A tenant cannot grant itself platform capabilities, and platform billing access does not grant tenant-user impersonation.
+Tenant Admin manages its own users, memberships, seats within approved limits, entitled-module configuration, billing information/history, integrations, and workflows through tenant-scoped capabilities. Atlas Platform Admin uses distinct `PLATFORM_TENANT_*`, `PLATFORM_SUBSCRIPTION_*`, `PLATFORM_BILLING_*`, and `PLATFORM_ENTITLEMENT_MANAGE` capabilities. A tenant cannot grant itself platform capabilities, and platform billing access does not grant tenant-user impersonation.
 
 ## Mutation, audit, and recovery
 
