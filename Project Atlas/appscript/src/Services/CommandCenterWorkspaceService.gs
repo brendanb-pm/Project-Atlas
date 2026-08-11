@@ -10,11 +10,12 @@ function CommandCenterWorkspaceService_(dependencies){
   this.calendarRequests=dependencies.calendarRequests;
   this.clock=dependencies.clock||function(){return new Date();};
   this.limit=Number(dependencies.limit||12);
+  this.diagnostic=dependencies.diagnostic||function(entry){try{console.warn(JSON.stringify(entry));}catch(ignored){}};
 }
 CommandCenterWorkspaceService_.prototype.get=function(context){
   var capabilities=(context&&context.capabilities)||[],self=this,sections={},unavailable=[];
   function can(capability){return capabilities.indexOf(capability)!==-1;}
-  function read(name,allowed,reader){if(!allowed)return [];try{return reader()||[];}catch(error){unavailable.push({section:name,message:'This section is temporarily unavailable.'});return [];}}
+  function read(name,allowed,reader){if(!allowed)return [];try{return reader()||[];}catch(error){unavailable.push({section:name,message:'This section is temporarily unavailable.'});self.diagnostic({event:'COMMAND_CENTER_SOURCE_UNAVAILABLE',correlationId:String(context&&context.correlationId||''),source:name,category:String(error&&error.code||'SOURCE_READ_FAILED')});return [];}}
   var followUps=read('Follow-Ups',can('FOLLOWUP_READ'),function(){return (self.followUps||new FollowUpRepository_()).list();});
   var jobs=read('Jobs',can('OPERATIONS_READ'),function(){return (self.jobs||new MvpService_('Job')).list();});
   var purchases=read('Purchasing',can('PURCHASE_APPROVE')||can('PURCHASE_REQUEST'),function(){return (self.purchases||new PurchaseApprovalService_()).list();});
@@ -32,7 +33,7 @@ CommandCenterWorkspaceService_.prototype.get=function(context){
   sections.myWork=ownedFollowUps.slice(0,5).map(function(item){return {id:item.id,title:item.title||item.id,context:item.dueAt?'Due '+self.dateLabel_(item.dueAt):'Follow-Up',route:'follow-ups',source:'Follow-Up'};}).concat(ownedJobs.slice(0,5).map(function(item){return {id:item.id,title:item.id,context:item.status||'Current work',route:'jobs',source:'Job'};})).slice(0,8);
   var metricSources=[['Customer','CORE_RECORD_READ',function(){return (self.customers||new MvpService_('Customer')).list();}],['RFQ','RFQ_READ',function(){return (self.rfqs||new MvpService_('RFQ')).list();}],['Quote','RFQ_READ',function(){return (self.quotes||new MvpService_('Quote')).list();}],['Job','OPERATIONS_READ',function(){return jobs;}],['Invoice','FINANCE_READ',function(){return (self.invoices||new MvpService_('Invoice')).list();}]],metrics=[],recent={};
   metricSources.forEach(function(entry){if(!can(entry[1]))return;var rows=read(entry[0]+' reference',true,entry[2]);metrics.push({entity:entry[0],count:rows.length});if(['RFQ','Job','Invoice'].indexOf(entry[0])!==-1)recent[entry[0]]=rows.slice(-5).reverse().map(function(row){return self.reference_(entry[0],row);});});
-  return {generatedAt:now,attention:sections.attention,today:sections.today,myWork:sections.myWork,metrics:metrics,recent:recent,unavailable:unavailable,capabilities:{sales:can('SALES_READ')||can('FOLLOWUP_READ'),operations:can('OPERATIONS_READ'),approvals:can('PURCHASE_APPROVE')||can('QUOTE_APPROVE'),finance:can('FINANCE_READ'),admin:can('ADMIN_CONFIG')||can('ADMIN_IDENTITY')}};
+  return {generatedAt:now,accessState:capabilities.length?'READY':(context&&context.authoritative?'NO_APPLICABLE_CAPABILITIES':'IDENTITY_VALIDATION_REQUIRED'),attention:sections.attention,today:sections.today,myWork:sections.myWork,metrics:metrics,recent:recent,unavailable:unavailable,capabilities:{sales:can('SALES_READ')||can('FOLLOWUP_READ'),operations:can('OPERATIONS_READ'),approvals:can('PURCHASE_APPROVE')||can('QUOTE_APPROVE'),finance:can('FINANCE_READ'),admin:can('ADMIN_CONFIG')||can('ADMIN_IDENTITY')}};
 };
 CommandCenterWorkspaceService_.prototype.dayBounds_=function(value){var start=new Date(value);start.setHours(0,0,0,0);var end=new Date(start);end.setDate(end.getDate()+1);return {start:start,end:end};};
 CommandCenterWorkspaceService_.prototype.attention_=function(category,severity,title,summary,context,recordId,route,source){return {id:category+':'+recordId,category:category,severity:severity,title:title,summary:summary,context:context,recordId:recordId,route:route,source:source};};

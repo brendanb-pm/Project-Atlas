@@ -26,6 +26,7 @@ const service=new context.CommandCenterWorkspaceService_({
 });
 const adminCaps=['CORE_RECORD_READ','FOLLOWUP_READ','OPERATIONS_READ','RFQ_READ','FINANCE_READ','PURCHASE_APPROVE','CALENDAR_RECONCILE','ADMIN_CONFIG'];
 const model=service.get({userId:'USER-1',tenantId:'TENANT-1',capabilities:adminCaps});
+assert.equal(model.accessState,'READY');
 assert.equal(model.attention[0].severity,'CRITICAL_BLOCKING','blocking work sorts first');
 assert(model.attention.some(item=>item.category==='FOLLOWUP_OVERDUE'));
 assert(model.attention.some(item=>item.category==='PURCHASE_APPROVAL'));
@@ -41,15 +42,28 @@ const limited=new context.CommandCenterWorkspaceService_({followUps:list([],[],'
 assert.equal(limited.metrics.length,0,'unauthorized reference data is not returned');
 assert.equal(limited.capabilities.finance,false);
 
+const zeroCapability=new context.CommandCenterWorkspaceService_({clock:()=>now}).get({userId:'USER-3',tenantId:'TENANT-1',authoritative:true,capabilities:[]});
+assert.equal(zeroCapability.accessState,'NO_APPLICABLE_CAPABILITIES');
+assert.deepEqual(Array.from(zeroCapability.attention),[],'zero capability is a valid, explicit payload rather than a transport failure');
+const validationContext=new context.CommandCenterWorkspaceService_({clock:()=>now}).get({userId:'legacy',tenantId:'TENANT-1',authoritative:false,capabilities:[]});
+assert.equal(validationContext.accessState,'IDENTITY_VALIDATION_REQUIRED');
+
 const partial=new context.CommandCenterWorkspaceService_({followUps:{list(){throw new Error('sheet details');}},jobs:list([],[],'jobs'),rfqs:list([],[],'rfqs'),quotes:list([],[],'quotes'),customers:list([],[],'customers'),invoices:list([],[],'invoices'),purchases:list([],[],'purchases'),calendarRequests:list([],[],'calendar'),clock:()=>now}).get({userId:'USER-1',tenantId:'TENANT-1',capabilities:['FOLLOWUP_READ']});
 assert.equal(partial.unavailable[0].section,'Follow-Ups');
 assert.equal(partial.unavailable[0].message,'This section is temporarily unavailable.');
 assert.equal(partial.attention.length,0,'one source failure leaves the workspace usable');
 
+const diagnostics=[],unavailableSource={list(){throw Object.assign(new Error('private sheet detail'),{code:'CONFIGURATION_ERROR'});}};
+const allUnavailable=new context.CommandCenterWorkspaceService_({followUps:unavailableSource,jobs:unavailableSource,rfqs:unavailableSource,quotes:unavailableSource,customers:unavailableSource,invoices:unavailableSource,purchases:unavailableSource,calendarRequests:unavailableSource,clock:()=>now,diagnostic:item=>diagnostics.push(item)}).get({userId:'USER-1',tenantId:'TENANT-1',authoritative:true,correlationId:'AUTH-SAFE-1',capabilities:adminCaps});
+assert.equal(allUnavailable.accessState,'READY');
+assert.equal(allUnavailable.unavailable.length,8,'all optional sources degrade independently');
+assert(diagnostics.every(item=>item.correlationId==='AUTH-SAFE-1'&&!JSON.stringify(item).includes('private sheet detail')),'diagnostics retain safe correlation and source category without raw repository details');
+
 const index=fs.readFileSync(path.join(root,'UI','Index.html'),'utf8');
 const code=fs.readFileSync(path.join(root,'UI','Code.gs'),'utf8');
 const registry=fs.readFileSync(path.join(root,'Services','EndpointAuthorizationRegistry.gs'),'utf8');
 assert.match(code,/function getCommandCenterWorkspace/);
+assert.match(code,/serializeVmosValue_\(new CommandCenterWorkspaceService_\(\)\.get\(context\)\)/,'workspace is serialized before google.script.run transport');
 assert.match(registry,/getCommandCenterWorkspace:\{kind:'READ',capability:null\}/);
 assert.match(index,/getCommandCenterWorkspace\(\)/);
 assert.match(index,/Attention now/);
@@ -58,6 +72,9 @@ assert.match(index,/workspace-grid/);
 assert.match(index,/@media\(max-width:600px\)/);
 assert.match(index,/aria-labelledby="attention-title"/);
 assert.match(index,/state\.active==='CommandCenter'\)refreshWorkspace\(\)/,'Command Center no longer loads bootstrap on entry');
+assert.match(index,/function validWorkspacePayload/);
+assert.match(index,/NO_APPLICABLE_CAPABILITIES/);
+assert.match(index,/IDENTITY_VALIDATION_REQUIRED/);
 assert.equal((index.match(/\.getMvpBootstrap\(\)/g)||[]).length,1,'entity bootstrap remains a separate single call');
 assert.doesNotMatch(index,/Firearms|Coatings|Vitality|Asana/i);
 console.log('Command Center bounded workspace, attention, failure isolation, security presentation, accessibility, and responsive contracts passed');
