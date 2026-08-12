@@ -1,6 +1,6 @@
 # MOS-126B+C — Vendor Foundation and Quote Internal Costing
 
-**Release channel:** MAIN  
+**Release channel:** MAIN
 **Baseline:** `13ede8474733a17248a8178f4bf57c2d8ec55e1a`
 
 Atlas now defines one tenant-scoped Vendor organization with many capabilities, locations, contacts, and estimate references. Vendor estimates remain planning references: they do not represent purchase orders, receipts, AP invoices, inventory, or payment. The additive stores are `Vendors`, `VendorCapabilities`, `VendorLocations`, `VendorContacts`, `VendorEstimates`, `QuoteCostEstimates`, `QuoteCostLines`, `QuotePricingDecisions`, and `QuoteSourceDocumentLinks`; no initializer or production migration is included.
