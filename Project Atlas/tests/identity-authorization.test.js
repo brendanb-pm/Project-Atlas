@@ -51,7 +51,7 @@ const disabled=fixture({mode:'DISABLED_FOR_DEVELOPMENT'}); let disabledContext;
 disabled.execute('ADMIN_IDENTITY','dev',ctx=>{disabledContext=ctx;}); assert.equal(disabledContext.authoritative,false);
 assert.deepEqual(Array.from(disabledContext.capabilities),[],'development fallback never fabricates ADMIN access');
 
-assert.deepEqual(Array.from(context.ATLAS_DEFAULT_ROLE_CAPABILITIES.SHOP_OPERATOR),['CORE_RECORD_READ','OPERATIONS_READ','SHOP_FLOOR_OPERATE']);
+assert.deepEqual(Array.from(context.ATLAS_DEFAULT_ROLE_CAPABILITIES.SHOP_OPERATOR),['CORE_RECORD_READ','OPERATIONS_READ','SHOP_FLOOR_OPERATE','FIREARMS_READ','FIREARMS_CUSTODY']);
 assert.ok(context.ATLAS_DEFAULT_ROLE_CAPABILITIES.ADMIN.includes('ADMIN_IDENTITY'));
 assert.equal(fixture({membership:{id:'M-U',tenantId:'TENANT-A',userId:'USR-1',status:'ACTIVE',roles:'["UNKNOWN_ROLE"]'}}).execute(null,'read',ctx=>ctx.capabilities.length),0,'unrecognized roles grant no capabilities');
 assert.equal(fixture({membership:{id:'M-A',tenantId:'TENANT-A',userId:'USR-1',status:'ACTIVE',roles:'["ADMIN"]'}}).execute('ADMIN_CONFIG','admin',ctx=>ctx.capabilities.length),Object.keys(context.ATLAS_CAPABILITIES).length,'ADMIN maps to the current explicit capability registry');

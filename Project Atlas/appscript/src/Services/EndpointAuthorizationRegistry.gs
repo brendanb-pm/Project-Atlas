@@ -29,8 +29,9 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   recordCashReceipt:{kind:'HIGH_RISK_WRITE',capability:'FINANCE_WRITE'}, depositCashReceipt:{kind:'HIGH_RISK_WRITE',capability:'FINANCE_WRITE'},
   getUndepositedPaymentSummary:{kind:'READ',capability:'FINANCE_READ'}, submitPurchaseRequest:{kind:'WRITE',capability:'PURCHASE_REQUEST'},
   approvePurchaseRequest:{kind:'HIGH_RISK_WRITE',capability:'PURCHASE_APPROVE'}, recordPurchaseReceipt:{kind:'HIGH_RISK_WRITE',capability:'PURCHASE_REQUEST'},
+  getFirearmsWorkspace:{kind:'READ',capability:'FIREARMS_READ'}, intakeSerializedFirearm:{kind:'HIGH_RISK_WRITE',capability:'FIREARMS_WRITE'}, assignFirearmToJob:{kind:'HIGH_RISK_WRITE',capability:'FIREARMS_WRITE'}, moveFirearmCustody:{kind:'HIGH_RISK_WRITE',capability:'FIREARMS_CUSTODY'}, disposeSerializedFirearm:{kind:'HIGH_RISK_WRITE',capability:'FIREARMS_DISPOSE'}, correctSerializedFirearm:{kind:'HIGH_RISK_WRITE',capability:'FIREARMS_CORRECT'}, reconcileSerializedFirearm:{kind:'HIGH_RISK_WRITE',capability:'FIREARMS_RECONCILE'}, exportSerializedFirearms:{kind:'READ',capability:'FIREARMS_READ'},
   initializeIdeasPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'}, initializeShopOperationalPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'},
-  initializeFollowUpPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'}, initializePurchaseApprovalPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'},
+  initializeFollowUpPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'}, initializePurchaseApprovalPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'}, initializeFirearmsPersistence:{kind:'ADMINISTRATIVE',capability:'ADMIN_CONFIG'},
   doGet:{kind:'READ_ONLY',capability:null}
 };
 var ATLAS_MVP_ENTITY_CAPABILITIES={Customer:{read:'CORE_RECORD_READ',write:'CORE_RECORD_WRITE'},RFQ:{read:'RFQ_READ',write:'RFQ_WRITE'},Quote:{read:'RFQ_READ',write:'QUOTE_WRITE'},Job:{read:'OPERATIONS_READ',write:'OPERATIONS_WRITE'},Invoice:{read:'FINANCE_READ',write:'FINANCE_WRITE'}};
@@ -39,13 +40,14 @@ var ATLAS_MUTATION_RECOVERY = {
   createFollowUp:'DOMAIN_SPECIFIC_RECOVERY',rescheduleFollowUp:'DOMAIN_SPECIFIC_RECOVERY',scheduleFollowUp:'DOMAIN_SPECIFIC_RECOVERY',reassignFollowUp:'DOMAIN_SPECIFIC_RECOVERY',
   disconnectCalendarConnection:'EXPLICIT_REVIEW',retryCalendarConnection:'EXPLICIT_REVIEW',resolveCalendarExternalChange:'EXPLICIT_REVIEW',retryCalendarCleanup:'EXPLICIT_REVIEW',acknowledgeCalendarCleanup:'EXPLICIT_REVIEW',completeFollowUp:'DOMAIN_SPECIFIC_RECOVERY',cancelFollowUp:'DOMAIN_SPECIFIC_RECOVERY',
   createMvpRecord:'PREALLOCATED_RESOURCE_ID',updateMvpRecord:'EXPLICIT_REVIEW',approveQuote:'EXPLICIT_REVIEW',issueQuote:'EXPLICIT_REVIEW',
+  intakeSerializedFirearm:'PREALLOCATED_RESOURCE_ID',assignFirearmToJob:'EXPLICIT_REVIEW',moveFirearmCustody:'EXPLICIT_REVIEW',disposeSerializedFirearm:'EXPLICIT_REVIEW',correctSerializedFirearm:'EXPLICIT_REVIEW',reconcileSerializedFirearm:'EXPLICIT_REVIEW',
   inviteTenantUser:'EXPLICIT_REVIEW',updateTenantMembership:'EXPLICIT_REVIEW',recordInvoicePayment:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',
   createContextualRfq:'PREALLOCATED_RESOURCE_ID',createQuoteFromRfq:'PREALLOCATED_RESOURCE_ID',acceptQuote:'EXPLICIT_REVIEW',convertQuoteToJob:'PREALLOCATED_RESOURCE_ID',createInvoiceFromJob:'PREALLOCATED_RESOURCE_ID',
   configureShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',transitionShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',reportJobProblem:'DOMAIN_SPECIFIC_RECOVERY',resolveJobBlock:'DOMAIN_SPECIFIC_RECOVERY',
   captureIdea:'DOMAIN_SPECIFIC_RECOVERY',requestIdeaPromotion:'DOMAIN_SPECIFIC_RECOVERY',recordProcessTrial:'PREALLOCATED_RESOURCE_ID',
   recordCashReceipt:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',depositCashReceipt:'EXPLICIT_REVIEW',submitPurchaseRequest:'PREALLOCATED_RESOURCE_ID',approvePurchaseRequest:'EXPLICIT_REVIEW',recordPurchaseReceipt:'EXPLICIT_REVIEW',
   initializeIdeasPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',initializeShopOperationalPersistence:'BLOCKED_FROM_WRITABLE_PRODUCTION',
-  initializeFollowUpPersistence:'EXPLICIT_REVIEW',initializePurchaseApprovalPersistence:'EXPLICIT_REVIEW'
+  initializeFollowUpPersistence:'EXPLICIT_REVIEW',initializePurchaseApprovalPersistence:'EXPLICIT_REVIEW',initializeFirearmsPersistence:'EXPLICIT_REVIEW'
 };
 function getMvpEntityCapability_(entity,access) {var policy=ATLAS_MVP_ENTITY_CAPABILITIES[entity];if(!policy)throw new VmosValidationError_('Unsupported entity.');return policy[access];}
 function securityOperationOptions_(operation,resourceType,resourceId,parts,recoveryType,recoveryContext){var serialized=JSON.stringify(parts||{}),bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,serialized,Utilities.Charset.UTF_8),digest=bytes.map(function(value){var normalized=value<0?value+256:value;return ('0'+normalized.toString(16)).slice(-2);}).join('');return {idempotencyKey:operation+':'+digest,requestFingerprint:digest,resourceType:resourceType||'',resourceId:resourceId||'',recoveryType:recoveryType||'',recoveryContext:recoveryContext||{}};}

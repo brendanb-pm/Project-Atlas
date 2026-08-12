@@ -1,0 +1,9 @@
+const fs=require('fs'),path=require('path'),http=require('http');
+const root=path.join(__dirname,'..','..','appscript','src','UI'),port=Number(process.argv[2]||4177);
+let html=fs.readFileSync(path.join(root,'FirearmsWorkspace.html'),'utf8');
+const design=fs.readFileSync(path.join(root,'AtlasDesignSystem.html'),'utf8');
+const record={id:'FIREARM-A1',manufacturer:'Example Arms',model:'Model 7',serialNumber:'EXAMPLE-001',custodyStatus:'IN_WORK',custodyLocation:'Bench 2',lifecycleStatus:'ACQUIRED',classification:'Rifle',caliberGauge:'.308',customerId:'C-1',externalFflId:'',jobId:'JOB-1042',acquisitionDate:'2026-08-12',acquisitionSourceName:'Example Customer',version:3,history:[{eventType:'CUSTODY_MOVED',occurredAt:'2026-08-12 14:22',actorUserId:'USER-7'},{eventType:'ACQUIRED',occurredAt:'2026-08-12 09:12',actorUserId:'USER-3'}]};
+const data={legalNotice:'LEGAL/COMPLIANCE REVIEW REQUIRED: operational record; legal sufficiency requires review.',items:[record],selected:record,customers:[{id:'C-1',label:'Example Customer'}],jobs:[{id:'JOB-1042',label:'JOB-1042 — Slide work — Active'}],ffls:[{id:'F-1',label:'Example Partner FFL'}],reconciliation:[],bounds:{items:100,history:100}};
+const mock=`<script>window.google={script:{run:{_ok:null,withSuccessHandler:function(f){this._ok=f;return this},withFailureHandler:function(){return this},getFirearmsWorkspace:function(){this._ok({ok:true,data:${JSON.stringify(data)}});return this}}}};<\/script>`;
+html=html.replace("<?!= includeAtlasUi_('UI/AtlasDesignSystem') ?>",design).replace("<?!= includeAtlasUi_('UI/NavigationFrame') ?>",'').replace('<script>',mock+'<script>');
+http.createServer((request,response)=>{response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end(html);}).listen(port,'127.0.0.1',()=>console.log('Atlas firearms preview: http://127.0.0.1:'+port));
