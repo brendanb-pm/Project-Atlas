@@ -21,11 +21,12 @@ const repository = {
   create: (record) => { records.push({ ...record }); return record; },
   updateById: (id, changes) => { const record = repository.findById(id); Object.assign(record, changes); return record; }
 };
-const service = new context.PurchaseApprovalService_(repository, { threshold: 500 });
+const vendors={get:id=>({id,tenantId:'T-1',name:id==='V-2'?'Fastenal':'Acme Tool',status:'ACTIVE'})};
+const service = new context.PurchaseApprovalService_(repository, { threshold: 500 }, undefined, undefined, undefined, undefined, vendors, {tenantId:'T-1'});
 
-const requestFields = { requester: 'Josh@Vitality.test', vendor: 'Acme Tool', category: 'Cutting tools', classification: 'Job', businessJustification: 'Replace failed Tool #3', expectedRoiNeed: 'Restore machining capacity', description: 'Replacement drill' };
+const requestFields = { requester: 'Josh@Vitality.test', vendorId: 'V-1', category: 'Cutting tools', classification: 'Job', businessJustification: 'Replace failed Tool #3', expectedRoiNeed: 'Restore machining capacity', description: 'Replacement drill' };
 assert.throws(() => service.submit({ ...requestFields, amount: 0 }), /greater than zero/);
-assert.throws(() => service.submit({ ...requestFields, vendor: '', amount: 50 }), /Vendor is required/);
+assert.throws(() => service.submit({ ...requestFields, vendorId: '', amount: 50 }), /Vendor selection is required/);
 assert.throws(() => service.submit({ ...requestFields, classification: 'Petty cash', amount: 50 }), /Classification must be Job, CapEx, or Overhead/);
 assert.throws(() => service.submit({ ...requestFields, expectedRoiNeed: '', amount: 50 }), /Expected ROI/);
 
@@ -50,7 +51,7 @@ assert.equal(receipted.receiptReference, 'RCPT-2026-0001');
 assert.equal(receipted.actualPurchaseAmount, 487.25);
 assert.throws(() => service.recordReceipt(controlled.id, 'RCPT-2026-0002', 490, 'Amanda@vitality.test'), /cannot be replaced/);
 
-const lowSpend = service.submit({ ...requestFields, vendor: 'Fastenal', category: 'PPE', classification: 'Overhead', description: 'Gloves', amount: 500, actualPurchaseAmount: 499.5 });
+const lowSpend = service.submit({ ...requestFields, vendorId: 'V-2', category: 'PPE', classification: 'Overhead', description: 'Gloves', amount: 500, actualPurchaseAmount: 499.5 });
 assert.equal(lowSpend.approvalRequired, false);
 assert.equal(lowSpend.status, 'APPROVED_NO_APPROVAL_REQUIRED');
 assert.equal(lowSpend.actualPurchaseAmount, 499.5);
@@ -66,7 +67,7 @@ const securedRepository = {
   updateById: (id, changes) => Object.assign(securedRecords.find((item) => item.id === id), changes)
 };
 let authoritativeUser = 'USR-REQUESTER';
-const secured = new context.PurchaseApprovalService_(securedRepository, { threshold: 500 }, () => authoritativeUser);
+const secured = new context.PurchaseApprovalService_(securedRepository, { threshold: 500 }, () => authoritativeUser, undefined, undefined, undefined, vendors, {tenantId:'T-1'});
 const securedRequest = secured.submit({ ...requestFields, requester: 'FORGED-REQUESTER', amount: 501 });
 assert.equal(securedRequest.requester, 'USR-REQUESTER');
 assert.equal(securedRequest.createdBy, 'USR-REQUESTER');

@@ -8,14 +8,14 @@
  *   VMOS_PURCHASE_APPROVAL_THRESHOLD positive or zero numeric spend threshold
  *
  * Required logical fields and proposed headers:
- * Purchase Request ID, Request Date, Requester, Vendor, Category,
+ * Purchase Request ID, Request Date, Requester, Vendor ID, Vendor, Category,
  * Classification, Business Justification, Expected ROI / Need, Description,
  * Amount, Actual Purchase Amount, Status, Approval Required, Approver,
  * Approved At, Receipt Reference, Notes, Created At, Updated At, Created By,
  * Updated By, Security Operation ID, Security Operation Fingerprint,
  * Security Tenant ID, Security Actor ID.
  */
-var VMOS_PURCHASE_APPROVAL_FIELDS = ['id', 'requestDate', 'requester', 'vendor', 'category', 'classification', 'businessJustification', 'expectedRoiNeed', 'description', 'amount', 'actualPurchaseAmount', 'status', 'approvalRequired', 'approver', 'approvedAt', 'receiptReference', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'securityOperationId', 'securityOperationFingerprint', 'securityTenantId', 'securityActorId'];
+var VMOS_PURCHASE_APPROVAL_FIELDS = ['id', 'requestDate', 'requester', 'vendorId', 'vendor', 'category', 'classification', 'businessJustification', 'expectedRoiNeed', 'description', 'amount', 'actualPurchaseAmount', 'status', 'approvalRequired', 'approver', 'approvedAt', 'receiptReference', 'notes', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'securityOperationId', 'securityOperationFingerprint', 'securityTenantId', 'securityActorId'];
 
 function getPurchaseApprovalConfig_() {
   var properties = PropertiesService.getScriptProperties();

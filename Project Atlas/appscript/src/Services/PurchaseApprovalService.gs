@@ -2,7 +2,7 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator, mutationProof) {
+function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator, mutationProof, vendors, context) {
   this.config = config || getPurchaseApprovalConfig_();
   this.repository = repository || new PurchaseApprovalRepository_(this.config);
   this.auditUser = auditUser || getVmosAuditUser_;
@@ -10,16 +10,19 @@ function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerat
   this.lock=lock||null;
   this.idGenerator=idGenerator||newPurchaseApprovalId_;
   this.mutationProof=mutationProof||null;
+  this.vendors=vendors||null;
+  this.context=context||null;
 }
 
 PurchaseApprovalService_.prototype.list = function () { return this.repository.list(); };
 PurchaseApprovalService_.prototype.get = function (id) { return this.repository.findById(id); };
+PurchaseApprovalService_.prototype.vendor_=function(vendorId){requireValue_(vendorId,'Vendor selection');if(!this.vendors||!this.context)throw new VmosConfigurationError_('Canonical Vendor validation is unavailable.');var vendor=this.vendors.get(vendorId);if(!vendor||String(vendor.tenantId)!==String(this.context.tenantId))throw new VmosAuthorizationError_('Vendor is unavailable.');if(String(vendor.status||'ACTIVE').toUpperCase()!=='ACTIVE')throw new VmosValidationError_('Choose an active Vendor.');return vendor;};
 
 PurchaseApprovalService_.prototype.submit = function (input) {
   input = input || {};
   var auditActor=this.auditUser(), authoritativeRequester=this.authoritativeAudit?auditActor:input.requester;
   requireValue_(authoritativeRequester, 'Requester');
-  requireValue_(input.vendor, 'Vendor');
+  var vendor=this.vendor_(input.vendorId);
   requireValue_(input.category, 'Category');
   requireValue_(input.classification, 'Classification');
   requireValue_(input.businessJustification, 'Business justification');
@@ -34,7 +37,7 @@ PurchaseApprovalService_.prototype.submit = function (input) {
   var actualPurchaseAmount = normalizeActualPurchaseAmount_(input.actualPurchaseAmount);
   var now = new Date(), requiresApproval = amount > this.config.threshold;
   var record={
-    id: this.idGenerator(), requestDate: now, requester: String(authoritativeRequester).trim(), vendor: String(input.vendor).trim(),
+    id: this.idGenerator(), requestDate: now, requester: String(authoritativeRequester).trim(), vendorId:vendor.id, vendor:String(vendor.name).trim(),
     category: String(input.category).trim(), classification: classification, businessJustification: String(input.businessJustification).trim(),
     expectedRoiNeed: String(input.expectedRoiNeed).trim(), description: String(input.description).trim(), amount: amount, actualPurchaseAmount: actualPurchaseAmount,
     status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED_NO_APPROVAL_REQUIRED', approvalRequired: requiresApproval,
@@ -42,9 +45,11 @@ PurchaseApprovalService_.prototype.submit = function (input) {
     notes: input.notes ? String(input.notes).trim() : '', createdAt: now, updatedAt: now,
     createdBy: auditActor, updatedBy: auditActor
   },proof=typeof this.mutationProof==='function'?this.mutationProof():this.mutationProof;
-  if(proof){record.securityOperationId=proof.operationId;record.securityOperationFingerprint=proof.fingerprint;record.securityTenantId=proof.tenantId;record.securityActorId=proof.actorId;}
+  if(proof){record.securityOperationId=proof.operationId;record.securityOperationFingerprint=proof.fingerprint;record.securityTenantId=proof.tenantId;record.securityActorId=proof.actorId;}else if(this.context){record.securityTenantId=this.context.tenantId;record.securityActorId=auditActor;}
   return this.repository.create(record);
 };
+
+PurchaseApprovalService_.prototype.associateVendor=function(id,vendorId){return this.withMutationLock_(function(){var request=this.get(id);if(!request.securityTenantId||String(request.securityTenantId)!==String(this.context&&this.context.tenantId))throw new VmosAuthorizationError_('Purchase request is unavailable.');if(request.status!=='PENDING_APPROVAL')throw new VmosValidationError_('Vendor changes are limited to purchase requests still pending approval.');if(request.receiptReference)throw new VmosValidationError_('Vendor cannot be changed after receipt evidence is recorded.');var vendor=this.vendor_(vendorId),actor=this.auditUser();return this.repository.updateById(id,{vendorId:vendor.id,vendor:vendor.name,updatedAt:new Date(),updatedBy:actor});}.bind(this));};
 
 PurchaseApprovalService_.prototype.approve = function (id, approver, notes) {
   return this.withMutationLock_(function(){
