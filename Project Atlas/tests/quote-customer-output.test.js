@@ -1,0 +1,10 @@
+const assert=require('assert'),fs=require('fs'),path=require('path');const root=path.join(__dirname,'..','appscript','src');
+const config=fs.readFileSync(path.join(root,'ConfigQuoteCosting.gs'),'utf8'),code=fs.readFileSync(path.join(root,'UI','Code.gs'),'utf8'),registry=fs.readFileSync(path.join(root,'Services','EndpointAuthorizationRegistry.gs'),'utf8'),ui=fs.readFileSync(path.join(root,'UI','QuoteLifecycleUi.html'),'utf8'),service=fs.readFileSync(path.join(root,'Services','QuoteRevisionService.gs'),'utf8'),workflow=fs.readFileSync(path.join(root,'Services','CommercialWorkflowService.gs'),'utf8');
+['QuoteRevision','QuoteLineItem','Recurring Total Minor','Accepted By','Security Operation Fingerprint'].forEach(x=>assert(config.includes(x),x));
+['saveQuoteRevisionDraft','issueQuoteRevision','acceptQuoteRevision','getCustomerQuoteOutput'].forEach(x=>{assert(code.includes('function '+x),x);assert(registry.includes(x+':{'),x);});
+assert(registry.includes("saveQuoteRevisionDraft:'PREALLOCATED_RESOURCE_ID'"));assert(registry.includes("issueQuoteRevision:'EXPLICIT_REVIEW'"));assert(registry.includes("acceptQuoteRevision:'EXPLICIT_REVIEW'"));
+['Customer pricing','Internal costing','Source documents','Lifecycle and customer output','Print customer Quote','Atlas could not confirm'].forEach(x=>assert(ui.includes(x)||fs.readFileSync(path.join(root,'UI','QuoteBuilder.html'),'utf8').includes(x),x));
+assert(service.includes("['ISSUED','ACCEPTED','SUPERSEDED','EXPIRED','VOIDED']"));assert(service.includes("this.linesFor_(id,context.tenantId).map"));assert(!/output=function[\s\S]*vendorId/.test(service));
+assert(workflow.includes('acceptedQuoteRevisionId:quote.acceptedRevisionId'));assert(workflow.includes('exact issued Quote revision'));
+assert(!ui.includes('getMvpBootstrap'));assert(ui.includes('@media print'));assert(ui.includes('Your entries are preserved')||ui.includes('Refresh before retrying'));
+console.log('MOS-126F customer output contracts passed');
