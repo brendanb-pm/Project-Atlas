@@ -6,7 +6,7 @@ function PurchaseApprovalRepository_(config) {
 PurchaseApprovalRepository_.prototype.list = function () { return this.repository.list(); };
 PurchaseApprovalRepository_.prototype.listByJobId = function (jobId, tenantId, limit) {
   var maximum=Math.min(50,Math.max(1,Number(limit||20)));
-  return this.list().filter(function (row) { return String(row.securityTenantId)===String(tenantId)&&String(row.jobId||'')===String(jobId); }).slice(0,maximum);
+  return this.list().filter(function (row) { return String(row.securityTenantId)===String(tenantId)&&String(row.jobId||'')===String(jobId); }).sort(function(left,right){return String(right.requestDate||'').localeCompare(String(left.requestDate||''))||String(left.id||'').localeCompare(String(right.id||''));}).slice(0,maximum);
 };
 PurchaseApprovalRepository_.prototype.findById = function (id) { return this.repository.findById(id); };
 PurchaseApprovalRepository_.prototype.create = function (record) {

@@ -8,6 +8,7 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   selectAtlasSessionTenant:{kind:'PUBLIC_AUTH',capability:null},
   logoutAtlasSession:{kind:'PUBLIC_AUTH',capability:null},
   getAtlasNavigation:{kind:'READ',capability:null},
+  getJobCanvas:{kind:'READ',capability:'OPERATIONS_READ'},
   getCommandCenterWorkspace:{kind:'READ',capability:null},
   searchAtlasCommand:{kind:'READ',capability:null},
   getAtlasActivationHealth:{kind:'READ',capability:'ADMIN_CONFIG'},
