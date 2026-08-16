@@ -12,6 +12,9 @@ function SecurityOperationRecoveryService_(dependencies){
   this.processTrials=dependencies.processTrials||(typeof ProcessTrialRepository_!=='undefined'?new ProcessTrialRepository_():null);
   this.cashReceipts=dependencies.cashReceipts||(typeof CashReceiptRepository_!=='undefined'?new CashReceiptRepository_():null);
   this.purchases=dependencies.purchases||(typeof PurchaseApprovalRepository_!=='undefined'?new PurchaseApprovalRepository_():null);
+  this.vendors=dependencies.vendors||(typeof VendorRepository_!=='undefined'?new VendorRepository_():null);
+  this.quoteCostEstimates=dependencies.quoteCostEstimates||(typeof QuoteCostEstimateRepository_!=='undefined'?new QuoteCostEstimateRepository_():null);
+  this.quoteSourceLinks=dependencies.quoteSourceLinks||(typeof QuoteSourceDocumentLinkRepository_!=='undefined'?new QuoteSourceDocumentLinkRepository_():null);
   this.mvpFactory=dependencies.mvpFactory||function(type){return new MvpService_(type);};
   this.ledger=dependencies.ledger||new SecurityAuditService_({repository:this.securityEvents});
   this.clock=dependencies.clock||function(){return new Date();};
@@ -81,7 +84,7 @@ SecurityOperationRecoveryService_.prototype.probeState_=function(record,context)
   if(!Object.keys(expected).length)return {outcome:'UNCERTAIN'};
   return Object.keys(expected).every(function(key){return String(resource[key]===undefined?'':resource[key])===String(expected[key]===undefined?'':expected[key]);})?{outcome:'COMPLETED'}:{outcome:'UNCERTAIN'};
 };
-SecurityOperationRecoveryService_.prototype.matchesOperationProof_=function(record,resource){return !!resource&&String(resource.securityOperationId||'')===String(record.id||'')&&String(resource.securityOperationFingerprint||'')===String(record.requestFingerprint||'')&&String(resource.securityTenantId||'')===String(record.tenantId||'')&&String(resource.securityActorId||'')===String(record.userId||'');};
+SecurityOperationRecoveryService_.prototype.matchesOperationProof_=function(record,resource){return !!resource&&String(resource.securityOperationId||'')===String(record.id||'')&&String(resource.securityOperationFingerprint||'')===String(record.requestFingerprint||'')&&String(resource.securityTenantId||resource.tenantId||'')===String(record.tenantId||'')&&String(resource.securityActorId||'')===String(record.userId||'');};
 SecurityOperationRecoveryService_.prototype.resource_=function(record){
   var type=String(record.resourceType||''),id=record.resourceId;if(!id)throw new VmosError_('Recovery resource is unavailable.','NOT_FOUND');
   if(['Customer','RFQ','Quote','Job','Invoice'].indexOf(type)!==-1)return this.mvpFactory(type).get(id);
@@ -89,6 +92,9 @@ SecurityOperationRecoveryService_.prototype.resource_=function(record){
   if(type==='ProcessTrial'&&this.processTrials)return this.processTrials.findById(id);
   if(type==='CashReceipt'&&this.cashReceipts)return this.cashReceipts.findById(id);
   if(type==='PurchaseRequest'&&this.purchases)return this.purchases.findById(id);
+  if(type==='Vendor'&&this.vendors)return this.vendors.get(id);
+  if(type==='QuoteCostEstimate'&&this.quoteCostEstimates)return this.quoteCostEstimates.get(id);
+  if(type==='QuoteSourceDocumentLink'&&this.quoteSourceLinks)return this.quoteSourceLinks.get(id);
   throw new VmosError_('Recovery resource is unavailable.','NOT_FOUND');
 };
 

@@ -3,6 +3,7 @@ QuoteCostingRepository_.prototype.list=function(){return this.repository.list();
 QuoteCostingRepository_.prototype.get=function(id){return this.repository.findById(id);};
 QuoteCostingRepository_.prototype.create=function(record){return this.repository.insertUnique?this.repository.insertUnique(record):this.repository.insert(record);};
 QuoteCostingRepository_.prototype.update=function(id,changes){return this.repository.updateById(id,changes);};
+QuoteCostingRepository_.prototype.findFirst=function(criteria){return this.repository.findFirstByFields(criteria);};
 QuoteCostingRepository_.prototype.forTenant=function(tenantId){return this.list().filter(function(row){return String(row.tenantId)===String(tenantId);});};
 QuoteCostingRepository_.prototype.byField=function(tenantId,field,value,limit){return this.forTenant(tenantId).filter(function(row){return String(row[field])===String(value);}).slice(0,Math.min(200,Math.max(1,Number(limit||50))));};
 function VendorRepository_(adapter){QuoteCostingRepository_.call(this,'Vendor',ATLAS_QUOTE_COSTING_MAPPINGS.Vendor,adapter);} VendorRepository_.prototype=Object.create(QuoteCostingRepository_.prototype);
@@ -14,4 +15,6 @@ function VendorEstimateRepository_(adapter){QuoteCostingRepository_.call(this,'V
 function QuoteCostEstimateRepository_(adapter){QuoteCostingRepository_.call(this,'QuoteCostEstimate',ATLAS_QUOTE_COSTING_MAPPINGS.QuoteCostEstimate,adapter);} QuoteCostEstimateRepository_.prototype=Object.create(QuoteCostingRepository_.prototype);
 function QuoteCostLineRepository_(adapter){QuoteCostingRepository_.call(this,'QuoteCostLine',ATLAS_QUOTE_COSTING_MAPPINGS.QuoteCostLine,adapter);} QuoteCostLineRepository_.prototype=Object.create(QuoteCostingRepository_.prototype);
 function QuotePricingDecisionRepository_(adapter){QuoteCostingRepository_.call(this,'QuotePricingDecision',ATLAS_QUOTE_COSTING_MAPPINGS.QuotePricingDecision,adapter);} QuotePricingDecisionRepository_.prototype=Object.create(QuoteCostingRepository_.prototype);
+function SourceDocumentRepository_(adapter){QuoteCostingRepository_.call(this,'SourceDocument',ATLAS_QUOTE_COSTING_MAPPINGS.SourceDocument,adapter);} SourceDocumentRepository_.prototype=Object.create(QuoteCostingRepository_.prototype);
+SourceDocumentRepository_.prototype.search=function(tenantId,query,limit){var term=String(query||'').trim().toLowerCase();return this.forTenant(tenantId).filter(function(row){return String(row.status||'ACTIVE').toUpperCase()==='ACTIVE'&&(!term||String(row.title+' '+row.documentType).toLowerCase().indexOf(term)!==-1);}).sort(function(a,b){return String(a.title).localeCompare(String(b.title));}).slice(0,Math.min(50,Math.max(1,Number(limit||25))));};
 function QuoteSourceDocumentLinkRepository_(adapter){QuoteCostingRepository_.call(this,'QuoteSourceDocumentLink',ATLAS_QUOTE_COSTING_MAPPINGS.QuoteSourceDocumentLink,adapter);} QuoteSourceDocumentLinkRepository_.prototype=Object.create(QuoteCostingRepository_.prototype);
