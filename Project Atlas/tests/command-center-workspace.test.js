@@ -3,7 +3,7 @@ const fs=require('fs');
 const path=require('path');
 const vm=require('vm');
 const root=path.join(__dirname,'..','appscript','src');
-const context={Date,Object,Array,String,Number,JSON};
+const context={Date,Object,Array,String,Number,JSON,dailyProductionBucket_:()=> 'OVERDUE',getAtlasBusinessTimeZone_:()=> 'America/Los_Angeles'};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(root,'Services','CommandCenterWorkspaceService.gs'),'utf8'),context);
 const list=(rows,tracker,name)=>({list(){tracker.push(name);return rows;}});
@@ -15,7 +15,7 @@ const service=new context.CommandCenterWorkspaceService_({
     {id:'FU-TODAY',title:'Send sample update',dueAt:'2026-08-10T15:00:00',ownerUserId:'USER-1',status:'OPEN'},
     {id:'FU-OTHER',title:'Other owner',dueAt:'2026-08-10T16:00:00',ownerUserId:'USER-2',status:'OPEN'}
   ],reads,'followups'),
-  jobs:list([{id:'JOB-1',status:'BLOCKED',partId:'PART-LONG',operator:'USER-1'},{id:'JOB-2',status:'ACTIVE',operator:'USER-2'}],reads,'jobs'),
+  jobs:list([{id:'JOB-1',status:'BLOCKED',partId:'PART-LONG',operator:'USER-1'},{id:'JOB-2',status:'ACTIVE',operator:'USER-2'},{id:'JOB-DONE',status:'COMPLETED',dueDate:'2026-08-01',operator:'USER-1'}],reads,'jobs'),
   rfqs:list([{id:'RFQ-1',status:'REVIEW',description:'Pricing review'}],reads,'rfqs'),
   quotes:list([{id:'Q-1',status:'DRAFT'}],reads,'quotes'),
   customers:list([{id:'C-1'},{id:'C-2'}],reads,'customers'),
@@ -31,6 +31,7 @@ assert.equal(model.attention[0].severity,'CRITICAL_BLOCKING','blocking work sort
 assert(model.attention.some(item=>item.category==='FOLLOWUP_OVERDUE'));
 assert(model.attention.some(item=>item.category==='PURCHASE_APPROVAL'));
 assert(model.attention.some(item=>item.category==='CALENDAR_REVIEW'));
+assert(!model.attention.some(item=>item.resourceId==='JOB-DONE'),'completed Work Orders never surface as production due attention');
 assert.deepEqual(Array.from(model.today).map(item=>item.id),['FU-TODAY','FU-OTHER']);
 assert(model.myWork.some(item=>item.id==='FU-TODAY')&&model.myWork.some(item=>item.id==='JOB-1'));
 assert.equal(model.metrics.length,5);
