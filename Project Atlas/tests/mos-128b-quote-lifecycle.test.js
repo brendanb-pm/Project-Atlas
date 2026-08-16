@@ -1,0 +1,26 @@
+const assert=require('assert'),fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.join(__dirname,'..','appscript','src');
+const costing=fs.readFileSync(path.join(root,'Services','QuoteCostingService.gs'),'utf8').split('function VendorService_')[0];
+const revisionSource=fs.readFileSync(path.join(root,'Services','QuoteRevisionService.gs'),'utf8');
+function AtlasError(message){this.message=message;} AtlasError.prototype=Object.create(Error.prototype);
+const c=vm.createContext({Date,BigInt,String,Number,Math,Array,Object,JSON,VmosValidationError_:AtlasError,VmosAuthorizationError_:AtlasError,VmosConflictError:AtlasError});
+vm.runInContext(costing+revisionSource,c);
+function repo(seed=[]){return {rows:seed.map(x=>({...x})),get(id){return this.rows.find(x=>x.id===id)},create(x){if(this.get(x.id))throw Error('duplicate');this.rows.push({...x});return x},update(id,x){const row=this.get(id);if(!row)throw Error('missing '+id);Object.assign(row,x);return row},byField(t,k,v,l){return this.rows.filter(x=>String(x.tenantId||x.securityTenantId)===String(t)&&String(x[k])===String(v)).slice(0,l)}}}
+function MvpService(entity,deps){this.repository=deps.repository;this.update=(id,changes)=>this.repository.update(id,changes);} c.MvpService_=MvpService;
+const tenant='T1',quotes=repo([{id:'Q1',customerId:'C1',rfqId:'R1',securityTenantId:tenant,status:'Draft'}]),customers=repo([{id:'C1',name:'Customer',securityTenantId:tenant}]),revisions=repo(),lines=repo();
+let op=0;const context=()=>({tenantId:tenant,userId:'U1',operationId:'OP-'+(++op),requestFingerprint:'FP-'+op});
+const service=new c.QuoteRevisionService_({quotes:{get:quotes.get.bind(quotes),repository:quotes},customers,revisions,lines,uuid:()=>String(op),clock:()=>new Date('2026-08-16T12:00:00Z')});
+let saved=service.saveDraft({quoteId:'Q1',lines:[{description:'Rev 1',quantity:'1',unitPriceMinor:'100'}]},context(),'REV-1');
+const staleVersion=saved.revision.version,issued1=service.issue('REV-1',staleVersion,context());assert.equal(issued1.status,'ISSUED');
+quotes.update('Q1',{status:'Draft',issuedRevisionId:''});assert.equal(service.issue('REV-1',revisions.get('REV-1').version,context()).status,'ISSUED');assert.equal(quotes.get('Q1').issuedRevisionId,'REV-1','duplicate issue reconciles split root state');
+assert.throws(()=>service.issue('MISSING',1,context()),/unavailable/,'issue requires an exact tenant-scoped revision');
+saved=service.saveDraft({quoteId:'Q1',lines:[{description:'Rev 2',quantity:'1',unitPriceMinor:'125'}]},context(),'REV-2');assert.throws(()=>service.issue('REV-2',saved.revision.version-1,context()),/changed/,'stale draft issue is rejected');service.issue('REV-2',saved.revision.version,context());assert.equal(revisions.get('REV-1').status,'SUPERSEDED');
+assert.throws(()=>service.accept('REV-1',revisions.get('REV-1').version,context()),/current issued/,'superseded revision cannot be accepted');
+service.accept('REV-2',revisions.get('REV-2').version,context());quotes.update('Q1',{status:'Issued',acceptedRevisionId:''});service.accept('REV-2',revisions.get('REV-2').version,context());assert.equal(quotes.get('Q1').acceptedRevisionId,'REV-2','duplicate acceptance reconciles split root state');
+const workspace=service.current('Q1',context());assert.equal(workspace.acceptedRevision.revisionNumber,2);assert.deepEqual(workspace.revisions.map(x=>x.status),['ACCEPTED','SUPERSEDED']);
+const commercial=fs.readFileSync(path.join(root,'UI','CommercialWorkflow.html'),'utf8'),lifecycle=fs.readFileSync(path.join(root,'UI','QuoteLifecycleUi.html'),'utf8'),code=fs.readFileSync(path.join(root,'UI','Code.gs'),'utf8'),index=fs.readFileSync(path.join(root,'UI','Index.html'),'utf8');
+assert.match(commercial,/kind==='quotes'.*quote-builder&quoteId=/s);assert.doesNotMatch(commercial,/Approve internally|Issue to Customer|Record Customer acceptance/);
+assert.match(lifecycle,/Issue this revision/);assert.match(lifecycle,/Accept this issued revision/);assert.match(lifecycle,/Create successor revision/);assert.match(lifecycle,/Accepted.*Rev/s);assert.match(lifecycle,/convertQuoteToJob\(state\.quote\.id,input\)/);assert.match(lifecycle,/state\.acceptedRevision=data\.acceptedRevision\|\|null/);assert.match(lifecycle,/var accepted=state\.acceptedRevision/);
+['approveQuote','issueQuote','acceptQuote'].forEach(name=>{const body=code.match(new RegExp('function '+name+'\\([^)]*\\)\\{([^\\n]+)'))[1];assert.match(body,/throw new VmosAuthorizationError_/);assert.doesNotMatch(body,/MvpLifecycleService_|CommercialWorkflowService_/);});
+assert.match(index,/Quote:'quotes'/);
+console.log('MOS-128B canonical revision routing, lifecycle convergence, and compatibility quarantine tests passed');
