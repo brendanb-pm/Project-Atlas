@@ -1,6 +1,6 @@
 const assert=require('assert'),fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..','appscript','src');let seq=0;
-const c=vm.createContext({BigInt,String,Number,Boolean,Date,Object,Array,Math,JSON,Utilities:{getUuid:()=>String(++seq).padStart(4,'0')},VmosValidationError_:function(m){this.message=m;this.code='VALIDATION_ERROR'},VmosAuthorizationError_:function(m){this.message=m;this.code='AUTHORIZATION_ERROR'}});
+const c=vm.createContext({String,Number,Boolean,Date,Object,Array,Math,JSON,Utilities:{getUuid:()=>String(++seq).padStart(4,'0')},VmosValidationError_:function(m){this.message=m;this.code='VALIDATION_ERROR'},VmosAuthorizationError_:function(m){this.message=m;this.code='AUTHORIZATION_ERROR'}});
 ['ConfigQuoteCosting.gs','Services/QuoteCostingService.gs'].forEach(file=>vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),c));
 const engine=new c.QuoteCostEngine_();
 const lines=[

@@ -1,7 +1,7 @@
 const assert=require('assert'),fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..','appscript','src');
 function E(message){this.message=message;this.code='ERROR'} E.prototype=Object.create(Error.prototype);
-const c=vm.createContext({Date,BigInt,String,Number,Boolean,Math,Array,Object,JSON,VmosValidationError_:E,VmosAuthorizationError_:E,VmosConflictError:E,VmosConfigurationError_:E,Utilities:{getUuid:()=> 'UUID'}});
+const c=vm.createContext({Date,String,Number,Boolean,Math,Array,Object,JSON,VmosValidationError_:E,VmosAuthorizationError_:E,VmosConflictError:E,VmosConfigurationError_:E,Utilities:{getUuid:()=> 'UUID'}});
 vm.runInContext(fs.readFileSync(path.join(root,'ConfigQuoteCosting.gs'),'utf8')+fs.readFileSync(path.join(root,'Services','QuoteCostingService.gs'),'utf8'),c);
 const hourly=new c.QuoteCostEngine_();
 assert.equal(hourly.calculateLine({basis:'HOURLY_PER_PART',rateMinor:'100',hoursPerPart:'0.3333'},'3').extendedCostMinor,'100');
