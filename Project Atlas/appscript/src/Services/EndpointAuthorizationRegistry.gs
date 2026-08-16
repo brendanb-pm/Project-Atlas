@@ -52,7 +52,7 @@ var ATLAS_MUTATION_RECOVERY = {
   intakeSerializedFirearm:'PREALLOCATED_RESOURCE_ID',assignFirearmToJob:'EXPLICIT_REVIEW',moveFirearmCustody:'EXPLICIT_REVIEW',disposeSerializedFirearm:'EXPLICIT_REVIEW',correctSerializedFirearm:'EXPLICIT_REVIEW',reconcileSerializedFirearm:'EXPLICIT_REVIEW',
   inviteTenantUser:'EXPLICIT_REVIEW',updateTenantMembership:'EXPLICIT_REVIEW',recordInvoicePayment:'COMMAND_IDEMPOTENCY_KEY_LOOKUP',
   createContextualRfq:'PREALLOCATED_RESOURCE_ID',createQuoteFromRfq:'PREALLOCATED_RESOURCE_ID',acceptQuote:'EXPLICIT_REVIEW',convertQuoteToJob:'PREALLOCATED_RESOURCE_ID',createInvoiceFromJob:'PREALLOCATED_RESOURCE_ID',
-  createVendor:'PREALLOCATED_RESOURCE_ID',saveQuoteRevisionDraft:'PREALLOCATED_RESOURCE_ID',issueQuoteRevision:'EXPLICIT_REVIEW',acceptQuoteRevision:'EXPLICIT_REVIEW',addQuoteSourceDocumentLink:'PREALLOCATED_RESOURCE_ID',removeQuoteSourceDocumentLink:'EXPLICIT_REVIEW',saveQuoteCostEstimate:'PREALLOCATED_RESOURCE_ID',
+  createVendor:'PREALLOCATED_RESOURCE_ID',saveQuoteRevisionDraft:'DOMAIN_SPECIFIC_RECOVERY',issueQuoteRevision:'DOMAIN_SPECIFIC_RECOVERY',acceptQuoteRevision:'DOMAIN_SPECIFIC_RECOVERY',addQuoteSourceDocumentLink:'PREALLOCATED_RESOURCE_ID',removeQuoteSourceDocumentLink:'EXPLICIT_REVIEW',saveQuoteCostEstimate:'DOMAIN_SPECIFIC_RECOVERY',
   configureShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',transitionShopFloorJob:'DOMAIN_SPECIFIC_RECOVERY',reportJobProblem:'DOMAIN_SPECIFIC_RECOVERY',resolveJobBlock:'DOMAIN_SPECIFIC_RECOVERY',
   updateDailyProductionJob:'EXPLICIT_REVIEW',
   captureIdea:'DOMAIN_SPECIFIC_RECOVERY',requestIdeaPromotion:'DOMAIN_SPECIFIC_RECOVERY',recordProcessTrial:'PREALLOCATED_RESOURCE_ID',
