@@ -10,6 +10,7 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   getAtlasNavigation:{kind:'READ',capability:null},
   getJobCanvas:{kind:'READ',capability:'OPERATIONS_READ'},
   getCommandCenterWorkspace:{kind:'READ',capability:null},
+  getMyWork:{kind:'READ',capability:null},
   searchAtlasCommand:{kind:'READ',capability:null},
   getAtlasActivationHealth:{kind:'READ',capability:'ADMIN_CONFIG'},
   getAdminWorkspace:{kind:'READ',capability:'ADMIN_CONFIG'}, getAdminIdentityWorkspace:{kind:'READ',capability:'ADMIN_IDENTITY'}, getTenantOperationalAdminWorkspace:{kind:'READ',capability:'ADMIN_IDENTITY'}, inviteTenantUser:{kind:'ADMINISTRATIVE',capability:'ADMIN_IDENTITY'}, updateTenantMembership:{kind:'ADMINISTRATIVE',capability:'ADMIN_IDENTITY'}, getPlatformCommercialWorkspace:{kind:'READ',capability:'PLATFORM_TENANT_READ'},

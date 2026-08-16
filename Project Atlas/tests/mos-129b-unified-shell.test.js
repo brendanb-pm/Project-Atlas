@@ -3,7 +3,7 @@ const root=path.join(__dirname,'..','appscript','src');
 const navContext={Object,Array,String,JSON,VmosConfigurationError_:function(){},PropertiesService:{getScriptProperties:()=>({getProperty:()=>''})}};vm.createContext(navContext);['ConfigNavigation.gs','Services/NavigationService.gs'].forEach(file=>vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),navContext));
 const profile={productDisplayName:'Atlas',organizationName:'North Shop',deploymentDisplayName:'Pilot',enabledModules:['FIREARMS']},navigation=new navContext.AtlasNavigationService_({profile});
 const owner=navigation.getModel({capabilities:['CORE_RECORD_READ','SALES_READ','FOLLOWUP_READ','RFQ_READ','OPERATIONS_READ','FINANCE_READ','ADMIN_CONFIG']},'home');
-assert.equal(owner.persona,'OWNER_MANAGER');assert.equal(owner.defaultRoute,'home');assert.deepEqual(Array.from(owner.groups).map(g=>g.id),['HOME','CUSTOMERS','COMMERCIAL','PRODUCTION','FINANCE','ADMINISTRATION']);assert.equal(owner.session.tenantLabel,'North Shop');
+assert.equal(owner.persona,'OWNER_MANAGER');assert.equal(owner.defaultRoute,'home');assert.deepEqual(Array.from(owner.groups).map(g=>g.id),['HOME','WORK','CUSTOMERS','COMMERCIAL','PRODUCTION','FINANCE','ADMINISTRATION']);assert.equal(owner.session.tenantLabel,'North Shop');
 const operator=navigation.getModel({capabilities:['OPERATIONS_READ','SHOP_FLOOR_OPERATE']},'home');assert.equal(operator.persona,'SHOP_OPERATOR');assert.equal(operator.defaultRoute,'shop-floor');
 const admin=navigation.getModel({capabilities:['ADMIN_CONFIG']},'home');assert.equal(admin.persona,'TENANT_ADMIN');assert.equal(admin.defaultRoute,'admin');
 const neutral=navigation.getModel({capabilities:[]},'home');assert.equal(neutral.persona,'NEUTRAL');assert.equal(neutral.defaultRoute,'home');

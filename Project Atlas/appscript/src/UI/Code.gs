@@ -15,6 +15,7 @@ function callable_(name,abusePolicy,operation,abuseKey,capabilityOverride,operat
 function getAtlasNavigation(currentRoute){return callable_('getAtlasNavigation','NORMAL_READ',function(context){return new AtlasNavigationService_().getModel(context,currentRoute);});}
 function getJobCanvas(jobId){return callable_('getJobCanvas','EXPENSIVE_READ',function(context){var canvasContext=Object.assign({},context,{enabledModules:getAtlasDeploymentProfile_().enabledModules.slice()});return new JobCanvasService_().get(jobId,canvasContext);});}
 function getCommandCenterWorkspace(){return callable_('getCommandCenterWorkspace','EXPENSIVE_READ',function(context){return serializeVmosValue_(new CommandCenterWorkspaceService_().get(context));});}
+function getMyWork(){return callable_('getMyWork','EXPENSIVE_READ',function(context){return new MyWorkService_().get(context);});}
 function searchAtlasCommand(query,limit){return callable_('searchAtlasCommand','NORMAL_READ',function(context){var searchContext=Object.assign({},context,{enabledModules:getAtlasDeploymentProfile_().enabledModules.slice()});return serializeVmosValue_(new UnifiedSearchService_().search(query,searchContext,limit));});}
 function getAtlasActivationHealth(){return callable_('getAtlasActivationHealth','ADMINISTRATIVE',function(context){return new AtlasActivationHealthService_().get(context);});}
 function getAdminWorkspace(){return callable_('getAdminWorkspace','ADMINISTRATIVE',function(context){return new AdminWorkspaceService_().get(context);});}
