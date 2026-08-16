@@ -9,6 +9,7 @@ var ATLAS_CALLABLE_ENDPOINTS = {
   logoutAtlasSession:{kind:'PUBLIC_AUTH',capability:null},
   getAtlasNavigation:{kind:'READ',capability:null},
   getCommandCenterWorkspace:{kind:'READ',capability:null},
+  searchAtlasCommand:{kind:'READ',capability:null},
   getAtlasActivationHealth:{kind:'READ',capability:'ADMIN_CONFIG'},
   getAdminWorkspace:{kind:'READ',capability:'ADMIN_CONFIG'}, getAdminIdentityWorkspace:{kind:'READ',capability:'ADMIN_IDENTITY'}, getTenantOperationalAdminWorkspace:{kind:'READ',capability:'ADMIN_IDENTITY'}, inviteTenantUser:{kind:'ADMINISTRATIVE',capability:'ADMIN_IDENTITY'}, updateTenantMembership:{kind:'ADMINISTRATIVE',capability:'ADMIN_IDENTITY'}, getPlatformCommercialWorkspace:{kind:'READ',capability:'PLATFORM_TENANT_READ'},
   getCommercialWorkflowWorkspace:{kind:'READ',capability:'DYNAMIC_MVP'}, createContextualRfq:{kind:'WRITE',capability:'RFQ_WRITE'}, createQuoteFromRfq:{kind:'WRITE',capability:'QUOTE_WRITE'}, acceptQuote:{kind:'HIGH_RISK_WRITE',capability:'QUOTE_APPROVE'}, convertQuoteToJob:{kind:'HIGH_RISK_WRITE',capability:'OPERATIONS_WRITE'}, createInvoiceFromJob:{kind:'HIGH_RISK_WRITE',capability:'FINANCE_WRITE'}, recordInvoicePayment:{kind:'HIGH_RISK_WRITE',capability:'FINANCE_WRITE'}, reconcileInvoicePaymentAttempt:{kind:'READ',capability:'FINANCE_WRITE'}, getPurchasingWorkspace:{kind:'READ',capability:'PURCHASE_REQUEST'}, searchPurchasingVendors:{kind:'READ',capability:'PURCHASE_REQUEST'}, associatePurchaseRequestVendor:{kind:'HIGH_RISK_WRITE',capability:'PURCHASE_REQUEST'},
