@@ -28,7 +28,7 @@ function AtlasAuthorizationService_(dependencies) {
   dependencies=dependencies||{}; this.config=dependencies.config||getAtlasIdentityConfig_(); this.principals=dependencies.principals||new GoogleAppsScriptPrincipalResolver_();
   this.users=dependencies.users||new AtlasUserRepository_(); this.memberships=dependencies.memberships||new TenantMembershipRepository_();
   this.identities=dependencies.identities||new ExternalIdentityReferenceRepository_(); this.clock=dependencies.clock||function(){return new Date();};
-  this.uuid=dependencies.uuid||function(){return Utilities.getUuid();}; this.entitlements=dependencies.entitlements||{assertAllowed:function(){return true;}};
+  this.uuid=dependencies.uuid||function(){return Utilities.getUuid();}; this.entitlements=dependencies.entitlements||(typeof CommercialEntitlementService_!=='undefined'?new CommercialEntitlementService_():{assertAllowed:function(){throw new VmosAuthorizationError_('Commercial entitlement is unavailable.');}});
   this.securityAudit=dependencies.securityAudit||null;this.securityAuditRepository=dependencies.securityAuditRepository;
 }
 AtlasAuthorizationService_.prototype.execute = function (requiredCapability, operationName, operation, options) {
@@ -56,7 +56,7 @@ AtlasAuthorizationService_.prototype.authorizeResolved_ = function (requiredCapa
   if (!this.config.tenantId) throw new VmosAuthorizationError_('Tenant context could not be resolved.');
   var principal=this.principals.resolve();
   if (!principal||principal.verified!==true||!principal.type||!principal.subject) throw new VmosAuthorizationError_('Authenticated identity could not be resolved.');
-  var reference=this.identities.findActive(principal.type,principal.subject);
+  var reference=principal.provider&&principal.issuer&&this.identities.findActiveIdentity?this.identities.findActiveIdentity(principal.provider,principal.issuer,principal.subject):this.identities.findActive(principal.type,principal.subject);
   if (!reference) throw new VmosAuthorizationError_('Active Atlas identity mapping is required.');
   var user=this.users.get(reference.userId);
   if (!user||String(user.status).toUpperCase()!=='ACTIVE') throw new VmosAuthorizationError_('Active Atlas user is required.');

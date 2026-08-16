@@ -10,7 +10,11 @@ var ATLAS_IDENTITY_MAPPINGS = {
   },
   ExternalIdentityReference: {
     sheetName: 'ExternalIdentityReferences', idField: 'IdentityReferenceID',
-    fields: { id: ['IdentityReferenceID'], userId: ['UserID'], provider: ['Provider'], subject: ['Subject'], status: ['Status'], createdAt: ['Created At'], updatedAt: ['Updated At'] }
+    fields: { id: ['IdentityReferenceID'], userId: ['UserID'], provider: ['Provider'], issuer: ['Issuer'], subject: ['Subject'], status: ['Status'], createdAt: ['Created At'], updatedAt: ['Updated At'] }
+  },
+  AtlasAuthSession: {
+    sheetName: 'AtlasAuthSessions', idField: 'SessionID',
+    fields: { id: ['SessionID'], tokenHash: ['Token Hash'], userId: ['UserID'], provider: ['Provider'], issuer: ['Issuer'], subject: ['Subject'], tenantId: ['TenantID'], permittedTenants: ['Permitted Tenants JSON'], issuedAt: ['Issued At'], expiresAt: ['Expires At'], authenticatedAt: ['Authenticated At'], revokedAt: ['Revoked At'], status: ['Status'], createdAt: ['Created At'], updatedAt: ['Updated At'] }
   },
   SecurityAuditEvent: {
     sheetName:'SecurityAuditEvents', idField:'SecurityAuditEventID',

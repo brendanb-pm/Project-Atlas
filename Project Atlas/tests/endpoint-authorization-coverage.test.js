@@ -9,7 +9,9 @@ assert.ok(callableNames.length>30,'Expected the complete callable surface.');
 callableNames.forEach(name=>{
   assert.match(registry,new RegExp('(?:^|\\s)'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*:'),name+' must be classified.');
   const line=code.split(/\r?\n/).find(candidate=>candidate.includes('function '+name+'('));
-  assert.ok(line.includes("callable_('"+name+"'"),name+' must enter the universal callable boundary.');
+  const publicAuth=new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+":\\{kind:'PUBLIC_AUTH'").test(registry);
+  const boundary=publicAuth?'authenticationCallable_':'callable_';
+  assert.ok(line.includes(boundary+"('"+name+"'"),name+' must enter its classified callable boundary.');
 });
 const classified=Array.from(registry.matchAll(/([A-Za-z][A-Za-z0-9_]*):\{kind:/g)).map(match=>match[1]);
 callableNames.forEach(name=>assert.ok(classified.includes(name),name+' must remain in the callable inventory.'));

@@ -1,5 +1,11 @@
 /** Machine-verifiable classification for every callable operation in UI/Code.gs. */
 var ATLAS_CALLABLE_ENDPOINTS = {
+  getAtlasSignInConfiguration:{kind:'PUBLIC_AUTH',capability:null},
+  beginAtlasSignIn:{kind:'PUBLIC_AUTH',capability:null},
+  completeAtlasSignIn:{kind:'PUBLIC_AUTH',capability:null},
+  getAtlasSessionStatus:{kind:'PUBLIC_AUTH',capability:null},
+  selectAtlasSessionTenant:{kind:'PUBLIC_AUTH',capability:null},
+  logoutAtlasSession:{kind:'PUBLIC_AUTH',capability:null},
   getAtlasNavigation:{kind:'READ',capability:null},
   getCommandCenterWorkspace:{kind:'READ',capability:null},
   getAtlasActivationHealth:{kind:'READ',capability:'ADMIN_CONFIG'},
