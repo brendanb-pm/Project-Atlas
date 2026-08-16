@@ -4,6 +4,10 @@ function PurchaseApprovalRepository_(config) {
   this.repository = new SheetsRepository_('PurchaseApproval', this.config.mapping, SpreadsheetApp.openById(this.config.spreadsheetId));
 }
 PurchaseApprovalRepository_.prototype.list = function () { return this.repository.list(); };
+PurchaseApprovalRepository_.prototype.listByJobId = function (jobId, tenantId, limit) {
+  var maximum=Math.min(50,Math.max(1,Number(limit||20)));
+  return this.list().filter(function (row) { return String(row.securityTenantId)===String(tenantId)&&String(row.jobId||'')===String(jobId); }).slice(0,maximum);
+};
 PurchaseApprovalRepository_.prototype.findById = function (id) { return this.repository.findById(id); };
 PurchaseApprovalRepository_.prototype.create = function (record) {
   if (!record || !record.id) throw new VmosValidationError_('Purchase request ID is required.');

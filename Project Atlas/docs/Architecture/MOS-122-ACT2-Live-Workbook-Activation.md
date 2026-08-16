@@ -25,11 +25,11 @@ Core Follow-Up repositories now resolve only the `followUps` and `events` mappin
 
 Purchasing uses the worksheet name and first header alias for each validated logical field in `VMOS_PURCHASE_APPROVAL_MAPPING`, in this order:
 
-`id`, `requestDate`, `requester`, `vendor`, `category`, `classification`, `businessJustification`, `expectedRoiNeed`, `description`, `amount`, `actualPurchaseAmount`, `status`, `approvalRequired`, `approver`, `approvedAt`, `receiptReference`, `notes`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`, `securityOperationId`, `securityOperationFingerprint`, `securityTenantId`, `securityActorId`.
+`id`, `requestDate`, `requester`, `vendorId`, `vendor`, `jobId`, `category`, `classification`, `businessJustification`, `expectedRoiNeed`, `description`, `amount`, `actualPurchaseAmount`, `status`, `approvalRequired`, `approver`, `approvedAt`, `receiptReference`, `notes`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`, `securityOperationId`, `securityOperationFingerprint`, `securityTenantId`, `securityActorId`.
 
 The proposed standard aliases remain:
 
-`Purchase Request ID`, `Request Date`, `Requester`, `Vendor`, `Category`, `Classification`, `Business Justification`, `Expected ROI / Need`, `Description`, `Amount`, `Actual Purchase Amount`, `Status`, `Approval Required`, `Approver`, `Approved At`, `Receipt Reference`, `Notes`, `Created At`, `Updated At`, `Created By`, `Updated By`, `Security Operation ID`, `Security Operation Fingerprint`, `Security Tenant ID`, `Security Actor ID`.
+`Purchase Request ID`, `Request Date`, `Requester`, `Vendor ID`, `Vendor`, `Job ID`, `Category`, `Classification`, `Business Justification`, `Expected ROI / Need`, `Description`, `Amount`, `Actual Purchase Amount`, `Status`, `Approval Required`, `Approver`, `Approved At`, `Receipt Reference`, `Notes`, `Created At`, `Updated At`, `Created By`, `Updated By`, `Security Operation ID`, `Security Operation Fingerprint`, `Security Tenant ID`, `Security Actor ID`.
 
 The initializer does not select a mapping, threshold, or approval policy. Purchasing activation remains blocked until Brendan confirms the live mapping targets the approved worksheet, the non-negative threshold is intentional, and the approval policy represented by that threshold is approved.
 

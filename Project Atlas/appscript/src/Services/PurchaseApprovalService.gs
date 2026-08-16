@@ -2,7 +2,7 @@
  * Spend-control domain service. No generic update API is provided: callers can
  * submit a request, approve an over-threshold request, and attach one receipt.
  */
-function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator, mutationProof, vendors, context) {
+function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerator, mutationProof, vendors, context, jobs) {
   this.config = config || getPurchaseApprovalConfig_();
   this.repository = repository || new PurchaseApprovalRepository_(this.config);
   this.auditUser = auditUser || getVmosAuditUser_;
@@ -12,17 +12,21 @@ function PurchaseApprovalService_(repository, config, auditUser, lock, idGenerat
   this.mutationProof=mutationProof||null;
   this.vendors=vendors||null;
   this.context=context||null;
+  this.jobs=jobs||null;
 }
 
 PurchaseApprovalService_.prototype.list = function () { return this.repository.list(); };
 PurchaseApprovalService_.prototype.get = function (id) { return this.repository.findById(id); };
 PurchaseApprovalService_.prototype.vendor_=function(vendorId){requireValue_(vendorId,'Vendor selection');if(!this.vendors||!this.context)throw new VmosConfigurationError_('Canonical Vendor validation is unavailable.');var vendor=this.vendors.get(vendorId);if(!vendor||String(vendor.tenantId)!==String(this.context.tenantId))throw new VmosAuthorizationError_('Vendor is unavailable.');if(String(vendor.status||'ACTIVE').toUpperCase()!=='ACTIVE')throw new VmosValidationError_('Choose an active Vendor.');return vendor;};
+PurchaseApprovalService_.prototype.job_=function(jobId){if(!jobId)return null;if(!this.jobs||!this.context)throw new VmosConfigurationError_('Canonical Work Order validation is unavailable.');var job=this.jobs.get(jobId);if(!job||String(job.securityTenantId||job.tenantId)!==String(this.context.tenantId))throw new VmosAuthorizationError_('Work Order is unavailable.');return job;};
+PurchaseApprovalService_.prototype.listForJob=function(jobId,limit){var capabilities=this.context&&this.context.capabilities||[];if(capabilities.indexOf('PURCHASE_REQUEST')===-1&&capabilities.indexOf('PURCHASE_APPROVE')===-1)throw new VmosAuthorizationError_('Purchase Request context is unavailable.');var job=this.job_(jobId),maximum=Math.min(50,Math.max(1,Number(limit||20))),rows=this.repository.listByJobId?this.repository.listByJobId(job.id,this.context.tenantId,maximum):this.repository.list().filter(function(row){return String(row.securityTenantId)===String(this.context.tenantId)&&String(row.jobId||'')===String(job.id);}.bind(this)).slice(0,maximum);return {jobId:job.id,items:rows.map(function(row){return {id:row.id,jobId:row.jobId,vendorId:row.vendorId||'',vendor:row.vendor||'',description:row.description||'',category:row.category||'',classification:row.classification||'',amount:row.amount,status:row.status||'',approvalRequired:row.approvalRequired===true,receiptReference:row.receiptReference||'',requestDate:row.requestDate||''};}),bound:maximum,hasMore:rows.length===maximum};};
 
 PurchaseApprovalService_.prototype.submit = function (input) {
   input = input || {};
   var auditActor=this.auditUser(), authoritativeRequester=this.authoritativeAudit?auditActor:input.requester;
   requireValue_(authoritativeRequester, 'Requester');
   var vendor=this.vendor_(input.vendorId);
+  var job=this.job_(input.jobId);
   requireValue_(input.category, 'Category');
   requireValue_(input.classification, 'Classification');
   requireValue_(input.businessJustification, 'Business justification');
@@ -37,7 +41,7 @@ PurchaseApprovalService_.prototype.submit = function (input) {
   var actualPurchaseAmount = normalizeActualPurchaseAmount_(input.actualPurchaseAmount);
   var now = new Date(), requiresApproval = amount > this.config.threshold;
   var record={
-    id: this.idGenerator(), requestDate: now, requester: String(authoritativeRequester).trim(), vendorId:vendor.id, vendor:String(vendor.name).trim(),
+    id: this.idGenerator(), requestDate: now, requester: String(authoritativeRequester).trim(), vendorId:vendor.id, vendor:String(vendor.name).trim(), jobId:job?job.id:'',
     category: String(input.category).trim(), classification: classification, businessJustification: String(input.businessJustification).trim(),
     expectedRoiNeed: String(input.expectedRoiNeed).trim(), description: String(input.description).trim(), amount: amount, actualPurchaseAmount: actualPurchaseAmount,
     status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED_NO_APPROVAL_REQUIRED', approvalRequired: requiresApproval,

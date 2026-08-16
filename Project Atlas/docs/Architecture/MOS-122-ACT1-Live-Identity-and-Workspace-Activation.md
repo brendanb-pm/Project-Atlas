@@ -101,7 +101,7 @@ Purchasing is intentionally opt-in. It requires:
 - a mapping containing `sheetName`, `idField`, and all logical fields documented in `PurchaseApprovalConfig.gs`;
 - `VMOS_PURCHASE_APPROVAL_THRESHOLD` as a non-negative number.
 
-The proposed header set is: `Purchase Request ID`, `Request Date`, `Requester`, `Vendor`, `Category`, `Classification`, `Business Justification`, `Expected ROI / Need`, `Description`, `Amount`, `Actual Purchase Amount`, `Status`, `Approval Required`, `Approver`, `Approved At`, `Receipt Reference`, `Notes`, `Created At`, `Updated At`, `Created By`, `Updated By`, `Security Operation ID`, `Security Operation Fingerprint`, `Security Tenant ID`, `Security Actor ID`.
+The proposed header set is: `Purchase Request ID`, `Request Date`, `Requester`, `Vendor ID`, `Vendor`, `Job ID`, `Category`, `Classification`, `Business Justification`, `Expected ROI / Need`, `Description`, `Amount`, `Actual Purchase Amount`, `Status`, `Approval Required`, `Approver`, `Approved At`, `Receipt Reference`, `Notes`, `Created At`, `Updated At`, `Created By`, `Updated By`, `Security Operation ID`, `Security Operation Fingerprint`, `Security Tenant ID`, `Security Actor ID`. Existing rows may leave `Job ID` blank; Atlas does not infer it.
 
 An existing, correctly mapped worksheet with zero rows returns `EMPTY`, not unavailable. No purchasing initializer exists.
 
