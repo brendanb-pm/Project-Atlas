@@ -1,0 +1,23 @@
+const assert=require('assert'),fs=require('fs'),path=require('path'),vm=require('vm'),base=path.join(__dirname,'..','appscript','src');
+function Validation(message){this.message=message;}Validation.prototype=Object.create(Error.prototype);
+function Conflict(message){this.message=message;}Conflict.prototype=Object.create(Error.prototype);
+function Authorization(message){this.message=message;}Authorization.prototype=Object.create(Error.prototype);
+const source=fs.readFileSync(path.join(base,'Services','CashReceiptService.gs'),'utf8'),rows=[];
+const repository={list:()=>rows.slice(),findById:id=>rows.find(x=>x.id===id),findByReceiptCommandId:id=>rows.find(x=>x.receiptCommandId===id)||null,insert:r=>(rows.push({...r}),rows[rows.length-1]),updateById:(id,c)=>Object.assign(rows.find(x=>x.id===id),c)};
+const context=vm.createContext({Date,String,Number,Object,Array,Error,isNaN,VmosValidationError_:Validation,VmosConflictError:Conflict,VmosAuthorizationError_:Authorization,LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},serializeVmosValue_:x=>JSON.parse(JSON.stringify(x))});
+vm.runInContext(source,context);
+const proof={operationId:'OP-PAY-1',fingerprint:'FP-PAY-1',tenantId:'TENANT-1',actorId:'USER-1'},service=new context.CashReceiptService_({repository,invoices:{get:id=>({id,customerId:'CUSTOMER-1'})},auditUser:()=> 'USER-1',mutationProof:proof,now:()=>new Date('2026-08-15T12:00:00Z'),idGenerator:()=> 'RCPT-26-0042'});
+const attempt={invoiceId:'INV-1',customerId:'CUSTOMER-1',receiptCommandId:'PAY-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE',receivedDate:'2026-08-15',amount:'125.50',paymentMethod:'CHECK',referenceNumber:'CHK-42'};
+const receipt=service.recordReceipt(attempt);assert.equal(rows.length,1);assert.equal(receipt.createdBy,'USER-1','Recorder must come from authoritative context.');
+let result=service.reconcilePaymentAttempt(attempt,{tenantId:'TENANT-1',userId:'USER-1'});assert.equal(result.state,'CONFIRMED');assert.deepEqual(JSON.parse(JSON.stringify(result.receipt)),{id:'RCPT-26-0042',invoiceId:'INV-1',customerId:'CUSTOMER-1',receivedDate:'2026-08-15',amount:125.5,paymentMethod:'CHECK',referenceNumber:'CHK-42'});
+assert.strictEqual(service.recordReceipt(attempt),receipt);assert.equal(rows.length,1,'Double click and repeated retry must retain one canonical receipt.');
+assert.equal(service.reconcilePaymentAttempt({...attempt,receiptCommandId:'PAY-NOT-COMPLETED-0000000000'},{tenantId:'TENANT-1',userId:'USER-1'}).state,'NOT_COMPLETED');
+assert.throws(()=>service.reconcilePaymentAttempt({...attempt,amount:'999.00'},{tenantId:'TENANT-1',userId:'USER-1'}),/different payment details/);
+assert.throws(()=>service.reconcilePaymentAttempt(attempt,{tenantId:'TENANT-2',userId:'USER-1'}),/unavailable/);
+assert.throws(()=>service.reconcilePaymentAttempt(attempt,{tenantId:'TENANT-1',userId:'USER-2'}),/unavailable/);
+
+const ui=fs.readFileSync(path.join(base,'UI','CommercialWorkflow.html'),'utf8'),code=fs.readFileSync(path.join(base,'UI','Code.gs'),'utf8'),registry=fs.readFileSync(path.join(base,'Services','EndpointAuthorizationRegistry.gs'),'utf8'),repositorySource=fs.readFileSync(path.join(base,'Repository','CashReceiptRepository.gs'),'utf8'),identitySource=fs.readFileSync(path.join(base,'Services','IdentityAuthorizationService.gs'),'utf8');
+new vm.Script((ui.match(/<script>([\s\S]*?)<\/script>/)||[])[1]);
+assert.match(ui,/sessionStorage\.setItem\(paymentKey\(\),JSON\.stringify\(paymentAttempt\)\)/);assert.match(ui,/paymentAttempt\.commandId/);assert.match(ui,/FAILED_SAFE_TO_RETRY/);assert.match(ui,/UNCERTAIN/);assert.match(ui,/CONFIRMED/);assert.match(ui,/reconcileInvoicePaymentAttempt/);assert.match(ui,/if\(paymentBusy\)return/);assert.match(ui,/if\(loadPaymentAttempt\(\)\)formPayment\(\)/);assert.doesNotMatch(ui,/commandId[^\n]*Record payment/);
+const endpoint=code.match(/function recordInvoicePayment[\s\S]*?function reconcileInvoicePaymentAttempt/)[0];assert.match(endpoint,/input\.paymentCommandId/);assert.match(endpoint,/options\.idempotencyKey='recordInvoicePayment:'\+commandId/);assert.doesNotMatch(endpoint,/Utilities\.getUuid/);assert.match(code,/cashReceiptOperatorResult_/);assert.match(registry,/reconcileInvoicePaymentAttempt:\{kind:'READ',capability:'FINANCE_WRITE'\}/);assert.match(repositorySource,/findFirstByFields/);assert.match(identitySource,/Command identity is already bound to different request details/);
+console.log('MOS-128C stable payment command, authoritative reconciliation, and safe retry tests passed');

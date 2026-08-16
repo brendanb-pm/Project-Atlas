@@ -37,6 +37,17 @@ CashReceiptService_.prototype.recordReceipt = function (input) {
   });
 };
 
+CashReceiptService_.prototype.reconcilePaymentAttempt = function (input, context) {
+  input = input || {}; context = context || {};
+  requireCashReceipt_(input.invoiceId, 'Invoice ID');
+  requireCashReceipt_(input.receiptCommandId, 'Receipt command ID');
+  var receipt = this.repository.findByReceiptCommandId(input.receiptCommandId);
+  if (!receipt) return { state: 'NOT_COMPLETED' };
+  if (String(receipt.securityTenantId || '') !== String(context.tenantId || '') || String(receipt.securityActorId || '') !== String(context.userId || '') || String(receipt.invoiceId || '') !== String(input.invoiceId || '')) throw new VmosAuthorizationError_('Payment attempt is unavailable.');
+  if (!cashReceiptPaymentMatches_(receipt, input)) throw new VmosConflictError('Payment attempt is already associated with different payment details.');
+  return { state: 'CONFIRMED', receipt: cashReceiptOperatorResult_(receipt) };
+};
+
 CashReceiptService_.prototype.depositReceipt = function (receiptId, input) {
   var self = this; input = input || {};
   requireCashReceipt_(receiptId, 'Receipt ID');
@@ -81,6 +92,8 @@ function cashReceiptDate_(value) {
 }
 function cashReceiptStartOfDay_(date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(); }
 function cashReceiptIntentMatches_(record,input,proof){proof=typeof proof==='function'?proof():proof;if(!proof)return false;return String(record.securityOperationFingerprint||'')===String(proof.fingerprint||'')&&String(record.securityTenantId||'')===String(proof.tenantId||'')&&String(record.securityActorId||'')===String(proof.actorId||'')&&String(record.invoiceId||'')===String(input.invoiceId||'')&&String(record.customerId||'')===String(input.customerId||'')&&Number(record.amount)===Number(input.amount)&&String(record.paymentMethod||'')===String(input.paymentMethod||'')&&String(record.receivedDate||'')===String(input.receivedDate||'')&&String(record.referenceNumber||'')===String(input.referenceNumber||'');}
+function cashReceiptPaymentMatches_(record,input){return Number(record.amount)===Number(input.amount)&&String(record.paymentMethod||'')===String(input.paymentMethod||'')&&String(record.receivedDate||'')===String(input.receivedDate||'')&&String(record.referenceNumber||'')===String(input.referenceNumber||'');}
+function cashReceiptOperatorResult_(record){return {id:record.id,invoiceId:record.invoiceId,customerId:record.customerId,receivedDate:record.receivedDate,amount:record.amount,paymentMethod:record.paymentMethod,referenceNumber:record.referenceNumber||''};}
 function withCashReceiptLock_(action) { var lock = LockService.getScriptLock(); lock.waitLock(30000); try { return action(); } finally { lock.releaseLock(); } }
 function generateCashReceiptIdUnderLock_(repository) {
   var year = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yy');
