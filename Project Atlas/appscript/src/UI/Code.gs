@@ -1,6 +1,6 @@
 function doGet(e) {
-  var route=resolveAtlasRoute_(e),template=atlasRouteTemplate_(route);
-  return HtmlService.createTemplateFromFile('UI/'+template).evaluate().setTitle(atlasRouteTitle_(route)).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  var route=resolveAtlasRoute_(e),availability=atlasRouteAvailability_(route,getAtlasDeploymentProfile_()),template=availability.state==='AVAILABLE'?atlasRouteTemplate_(route):'UnsupportedRoute',view=HtmlService.createTemplateFromFile('UI/'+template);view.atlasRequestedRoute=route;view.atlasRouteState=availability.state;view.atlasRouteMessage=availability.message;
+  return view.evaluate().setTitle(atlasRouteTitle_(route)).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 function includeAtlasUi_(path){return HtmlService.createHtmlOutputFromFile(path).getContent();}
 function authenticationCallable_(name,operation){try{var policy=ATLAS_CALLABLE_ENDPOINTS[name];if(!policy||policy.kind!=='PUBLIC_AUTH')throw new VmosAuthorizationError_('Authentication operation is unavailable.');enforceAbuseControl_(name,'NORMAL_READ',name);return {ok:true,data:operation()};}catch(error){return toClientError_(error);}}

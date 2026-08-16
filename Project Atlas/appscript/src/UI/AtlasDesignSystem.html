@@ -67,5 +67,8 @@ window.AtlasUi=window.AtlasUi||Object.freeze({
   announce:function(region,message,tone){if(!region)return;region.textContent=message;region.className='atlas-notice atlas-notice--'+(tone||'info');region.setAttribute('role',tone==='error'?'alert':'status');region.hidden=false;},
   clear:function(region){if(region){region.hidden=true;region.textContent='';}},
   fieldError:function(field,message){if(!field)return;field.setAttribute('aria-invalid',message?'true':'false');var id=field.id&&field.id+'-error',node=id&&document.getElementById(id);if(node){node.textContent=message||'';node.hidden=!message;field.setAttribute('aria-describedby',id);}}
+  ,isSessionExpired:function(result){return !!(result&&result.ok===false&&result.error&&result.error.code==='SESSION_EXPIRED');}
+  ,reauthenticate:function(){var route=new URLSearchParams(location.search).get('route')||'home';sessionStorage.setItem('atlasAuthReturnRoute',route);location.assign('?route=sign-in&auth=session_expired&return='+encodeURIComponent(route));}
+  ,sessionExpired:function(result,region){if(!this.isSessionExpired(result))return false;this.announce(region,'Your Atlas session has expired. Sign in again to continue.','error');if(region){var button=document.createElement('button');button.className='atlas-button atlas-button--primary';button.type='button';button.textContent='Sign in again';button.onclick=this.reauthenticate;region.appendChild(document.createElement('br'));region.appendChild(button);}return true;}
 });
 </script>

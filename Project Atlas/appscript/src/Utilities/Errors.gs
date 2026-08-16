@@ -42,6 +42,8 @@ function safeClientError_(error, referenceId) {
     UNKNOWN_OUTCOME: 'The result could not be confirmed. Refresh the record before trying again.',
     OPERATION_IN_PROGRESS: 'This request is already being processed. Refresh shortly to confirm the result.'
   };
+  if(code==='AUTHORIZATION_ERROR'&&/session is unavailable or expired/i.test(String(error&&error.message||'')))code='SESSION_EXPIRED';
+  messages.SESSION_EXPIRED='Your Atlas session has expired. Sign in again to continue.';
   var publicCode = code === 'CONFIGURATION_ERROR' ? 'CONFIGURATION_UNAVAILABLE' : (messages[code] ? code : 'INTERNAL_ERROR');
   var response = { code: publicCode, message: messages[code] || 'Your request could not be completed.', referenceId: referenceId };
   if (code === 'THROTTLED') response.retryAfterSeconds = Math.max(1, Number(error.retryAfterSeconds || 1));

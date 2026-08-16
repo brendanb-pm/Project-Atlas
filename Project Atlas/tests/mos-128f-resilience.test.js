@@ -1,0 +1,28 @@
+const assert=require('assert'),fs=require('fs'),path=require('path');
+const root=path.join(__dirname,'..','appscript','src','UI');
+const read=name=>fs.readFileSync(path.join(root,name),'utf8');
+const quote=read('QuoteBuilder.html'),signIn=read('SignIn.html'),frame=read('NavigationFrame.html'),purchase=read('PurchasingWorkspace.html'),vendor=read('VendorWorkspace.html'),unsupported=read('UnsupportedRoute.html'),design=read('AtlasDesignSystem.html');
+
+assert.match(quote,/function clearPickerBusy\(\)/);
+['customerSearch','rfqSearch','sourceSearch','sourceTargetSearch'].forEach(id=>assert(quote.includes(id)));
+assert.match(quote,/clearPickerBusy\(\);if\(AtlasUi\.sessionExpired/);
+assert.match(quote,/sequence!==picker\.sequence\[type\]/,'Superseded record-picker responses are ignored.');
+assert.match(frame,/addEventListener\('popstate'/);
+assert.match(frame,/window\.location\.reload\(\)/);
+assert.match(signIn,/signingOut=false/);
+assert.match(signIn,/if\(signingOut\)return/);
+assert.match(signIn,/Signing out…/);
+assert.match(signIn,/withFailureHandler\(function\(\)\{finishLogout/);
+assert.match(signIn,/application session remains available/);
+assert.match(signIn,/Microsoft or Google may still be signed in/);
+assert.match(signIn,/session_expired/);
+assert.match(design,/SESSION_EXPIRED/);
+assert.match(design,/Sign in again/);
+assert.match(unsupported,/Page not available/);
+assert.match(unsupported,/Module not enabled/);
+assert.match(unsupported,/does not reveal protected record details/);
+assert.match(purchase,/removeAttribute\('aria-busy'\)/);
+assert.match(purchase,/>Retry</);
+assert.match(vendor,/selected\?openVendor\(selected,true\):search\(\)/,'Vendor deep links restore the exact record without adding history.');
+assert.match(vendor,/sequence!==loadSequence/,'Stale Vendor detail responses are ignored.');
+console.log('MOS-128F async, history, sign-out, session, and route resilience tests passed');
