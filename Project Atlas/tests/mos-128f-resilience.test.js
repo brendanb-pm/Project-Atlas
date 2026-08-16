@@ -3,9 +3,8 @@ const root=path.join(__dirname,'..','appscript','src','UI');
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
 const quote=read('QuoteBuilder.html'),signIn=read('SignIn.html'),frame=read('NavigationFrame.html'),purchase=read('PurchasingWorkspace.html'),vendor=read('VendorWorkspace.html'),unsupported=read('UnsupportedRoute.html'),design=read('AtlasDesignSystem.html');
 
-assert.match(quote,/function clearPickerBusy\(\)/);
 ['customerSearch','rfqSearch','sourceSearch','sourceTargetSearch'].forEach(id=>assert(quote.includes(id)));
-assert.match(quote,/clearPickerBusy\(\);if\(AtlasUi\.sessionExpired/);
+assert.doesNotMatch(quote,/showError\([^)]*\)\{[^}]*clearPickerBusy/,'Generic errors do not own picker busy state.');
 assert.match(quote,/sequence!==picker\.sequence\[type\]/,'Superseded record-picker responses are ignored.');
 assert.match(frame,/addEventListener\('popstate'/);
 assert.match(frame,/window\.location\.reload\(\)/);
