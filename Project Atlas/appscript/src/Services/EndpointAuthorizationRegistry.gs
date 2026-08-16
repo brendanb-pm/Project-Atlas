@@ -2,6 +2,7 @@
 var ATLAS_CALLABLE_ENDPOINTS = {
   getAtlasSignInConfiguration:{kind:'PUBLIC_AUTH',capability:null},
   beginAtlasSignIn:{kind:'PUBLIC_AUTH',capability:null},
+  abortAtlasSignIn:{kind:'PUBLIC_AUTH',capability:null},
   completeAtlasSignIn:{kind:'PUBLIC_AUTH',capability:null},
   getAtlasSessionStatus:{kind:'PUBLIC_AUTH',capability:null},
   selectAtlasSessionTenant:{kind:'PUBLIC_AUTH',capability:null},

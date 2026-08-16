@@ -5,7 +5,8 @@ function doGet(e) {
 function includeAtlasUi_(path){return HtmlService.createHtmlOutputFromFile(path).getContent();}
 function authenticationCallable_(name,operation){try{var policy=ATLAS_CALLABLE_ENDPOINTS[name];if(!policy||policy.kind!=='PUBLIC_AUTH')throw new VmosAuthorizationError_('Authentication operation is unavailable.');enforceAbuseControl_(name,'NORMAL_READ',name);return {ok:true,data:operation()};}catch(error){return toClientError_(error);}}
 function getAtlasSignInConfiguration(){return authenticationCallable_('getAtlasSignInConfiguration',function(){return new AtlasAuthenticationService_().configuration();});}
-function beginAtlasSignIn(provider,returnRoute){return authenticationCallable_('beginAtlasSignIn',function(){return new AtlasAuthenticationService_().begin(provider,returnRoute);});}
+function beginAtlasSignIn(provider,returnRoute,flowId){return authenticationCallable_('beginAtlasSignIn',function(){return new AtlasAuthenticationService_().begin(provider,returnRoute,flowId);});}
+function abortAtlasSignIn(flowId,state){return authenticationCallable_('abortAtlasSignIn',function(){return new AtlasAuthenticationService_().abort(flowId,state);});}
 function completeAtlasSignIn(payload){return authenticationCallable_('completeAtlasSignIn',function(){return new AtlasAuthenticationService_().complete(payload||{});});}
 function getAtlasSessionStatus(token){return authenticationCallable_('getAtlasSessionStatus',function(){var row=new AtlasSessionService_().resolve(token);return {state:'SIGNED_IN',userId:row.userId,tenantId:row.tenantId,expiresAt:row.expiresAt,reauthenticationRequired:new AtlasSessionService_().requiresRecentAuthentication(row)};});}
 function selectAtlasSessionTenant(token,tenantId){return authenticationCallable_('selectAtlasSessionTenant',function(){return new AtlasSessionService_().selectTenant(token,tenantId,new TenantMembershipRepository_());});}
