@@ -1,5 +1,5 @@
 function doGet(e) {
-  var route=resolveAtlasRoute_(e),availability=atlasRouteAvailability_(route,getAtlasDeploymentProfile_()),template=availability.state==='AVAILABLE'?atlasRouteTemplate_(route):'UnsupportedRoute',view=HtmlService.createTemplateFromFile('UI/'+template);view.atlasRequestedRoute=route;view.atlasRouteState=availability.state;view.atlasRouteMessage=availability.message;
+  var route=resolveAtlasRoute_(e),availability=atlasRouteAvailability_(route,getAtlasDeploymentProfile_()),template=availability.state==='AVAILABLE'?atlasRouteTemplate_(route):'UnsupportedRoute',view=HtmlService.createTemplateFromFile('UI/'+template);view.atlasRequestedRoute=route;view.atlasRequestedRecordId=resolveAtlasCommercialRecordId_(e,route);view.atlasRouteState=availability.state;view.atlasRouteMessage=availability.message;
   return view.evaluate().setTitle(atlasRouteTitle_(route)).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 function includeAtlasUi_(path){var content=HtmlService.createHtmlOutputFromFile(path).getContent();if(path==='UI/NavigationFrame')content=content.replace("<?!= includeAtlasUi_('UI/UnifiedCommandPalette') ?>",HtmlService.createHtmlOutputFromFile('UI/UnifiedCommandPalette').getContent());return content;}

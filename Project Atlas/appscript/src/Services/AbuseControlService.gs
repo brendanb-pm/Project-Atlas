@@ -1,5 +1,6 @@
 /** Lightweight fixed-window protection for callable application operations. */
 var ATLAS_ABUSE_POLICIES = {
+  NORMAL_READ: { limit: 60, windowSeconds: 10, failureMode: 'OPEN' },
   EXPENSIVE_READ: { limit: 20, windowSeconds: 10, failureMode: 'OPEN' },
   NORMAL_WRITE: { limit: 30, windowSeconds: 10, failureMode: 'OPEN' },
   HIGH_RISK_WRITE: { limit: 10, windowSeconds: 30, failureMode: 'CLOSED' },
