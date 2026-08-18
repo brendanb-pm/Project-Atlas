@@ -61,6 +61,7 @@ const getContext = vm.createContext({
   Object, Array, String, Number, Math, Date, JSON, Error,
   resolveAtlasRoute_: navigationContext.resolveAtlasRoute_,
   resolveAtlasCommercialRecordId_: navigationContext.resolveAtlasCommercialRecordId_,
+  AtlasEntryRoutingService_: function () { this.resolve = route => ({ state: 'AUTHORIZED', route }); },
   atlasRouteAvailability_: () => ({ state: 'AVAILABLE', message: '' }),
   atlasRouteTemplate_: navigationContext.atlasRouteTemplate_,
   atlasRouteTitle_: navigationContext.atlasRouteTitle_,

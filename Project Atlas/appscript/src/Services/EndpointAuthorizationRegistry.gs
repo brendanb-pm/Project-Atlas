@@ -73,7 +73,7 @@ function executeCallable_(endpointName,abusePolicy,operation,abuseKey,capability
   enforceAbuseControl_(endpointName,abusePolicy,abuseKey);
   var capability=typeof capabilityOverride==='function'?capabilityOverride():capabilityOverride||policy.capability;
   if(capability==='DYNAMIC_MVP')throw new VmosAuthorizationError_('Domain capability was not resolved.');
-  operationOptions=operationOptions||{};operationOptions.auditRequired=policy.kind!=='READ'&&policy.kind!=='READ_ONLY';
+  operationOptions=operationOptions||{};operationOptions.strictAuthorization=true;operationOptions.auditRequired=policy.kind!=='READ'&&policy.kind!=='READ_ONLY';
   if(operationOptions.auditRequired){
     var strategy=ATLAS_MUTATION_RECOVERY[endpointName];
     if(!strategy)throw new VmosConfigurationError_('Callable mutation recovery is not classified.');

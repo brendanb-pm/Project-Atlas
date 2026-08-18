@@ -39,4 +39,44 @@ function atlasRouteAvailability_(route,profile){var definition=atlasRouteDefinit
 function resolveAtlasRoute_(event){event=event||{};var parameters=event.parameter||{},route=normalizeAtlasRoute_(parameters.route);Object.keys(ATLAS_LEGACY_ROUTE_ALIASES).some(function(alias){if(String(parameters[alias]||'')==='1'||(alias==='traveler'&&parameters[alias])){route=ATLAS_LEGACY_ROUTE_ALIASES[alias];return true;}return false;});return route;}
 function resolveAtlasCommercialRecordId_(event,route){var normalized=normalizeAtlasRoute_(route),commercial=['customers','rfqs','quotes','jobs','invoices'];if(commercial.indexOf(normalized)===-1)return '';var value=String(event&&event.parameter&&event.parameter.id||'').trim();return value&&value.length<=128&&/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)?value:'';}
 function atlasRouteTemplate_(route){return {home:'Index','my-work':'MyWork','sign-in':'SignIn','auth-callback':'AuthCallback',customers:'CommercialWorkflow',rfqs:'CommercialWorkflow',quotes:'CommercialWorkflow','quote-builder':'QuoteBuilder',jobs:'CommercialWorkflow',job:'JobCanvas','daily-production':'DailyProductionBoard',invoices:'CommercialWorkflow',purchasing:'PurchasingWorkspace',vendors:'VendorWorkspace',firearms:'FirearmsWorkspace','sales-activity':'SalesActivity','follow-ups':'CalendarFollowUps','shop-floor':'ShopFloor','operations-dashboard':'OperationsDashboard','floor-board':'FloorBoard',ideas:'Ideas',admin:'AdminSettings','platform-commercial':'PlatformCommercial',traveler:'Traveler'}[normalizeAtlasRoute_(route)]||'UnsupportedRoute';}
-function atlasRouteTitle_(route){var normalized=normalizeAtlasRoute_(route),authTitle={'sign-in':'Sign in','auth-callback':'Completing sign in'}[normalized],found=ATLAS_ROUTE_REGISTRY.filter(function(item){return item.id===normalized;})[0];return (authTitle||(found?found.label:'Page not available'))+' - Atlas';}
+function atlasRouteTitle_(route){var normalized=normalizeAtlasRoute_(route),authTitle={'sign-in':'Sign in','auth-callback':'Completing sign in','access-unavailable':'Access unavailable'}[normalized],found=ATLAS_ROUTE_REGISTRY.filter(function(item){return item.id===normalized;})[0];return (authTitle||(found?found.label:'Page not available'))+' - Atlas';}
+
+/**
+ * Strict server-side entry resolution. Unlike AtlasAuthorizationService_.execute,
+ * this path never applies the VALIDATION-mode legacy fallback: protected HTML is
+ * selected only after a verified principal maps to an active Atlas user and the
+ * configured tenant membership.
+ */
+function AtlasEntryRoutingService_(dependencies){
+  dependencies=dependencies||{};
+  this.config=dependencies.config||getAtlasIdentityConfig_();
+  this.principals=dependencies.principals||new GoogleAppsScriptPrincipalResolver_();
+  this.identities=dependencies.identities||new ExternalIdentityReferenceRepository_();
+  this.users=dependencies.users||new AtlasUserRepository_();
+  this.memberships=dependencies.memberships||new TenantMembershipRepository_();
+  this.entitlements=dependencies.entitlements||(typeof CommercialEntitlementService_!=='undefined'?new CommercialEntitlementService_():{assertAllowed:function(){throw new VmosAuthorizationError_('Commercial access is unavailable.');}});
+  this.navigation=dependencies.navigation||new AtlasNavigationService_();
+}
+AtlasEntryRoutingService_.prototype.resolve=function(requestedRoute){
+  var route=normalizeAtlasRoute_(requestedRoute);
+  if(route==='sign-in'||route==='auth-callback')return {state:'PUBLIC',route:route};
+  var principal;
+  try{principal=this.principals.resolve();}catch(error){return {state:'SIGN_IN',route:'sign-in',returnRoute:this.safeReturn_(route),reason:'signed_out'};}
+  if(!principal||principal.verified!==true||!principal.type||!principal.subject)return {state:'SIGN_IN',route:'sign-in',returnRoute:this.safeReturn_(route),reason:'signed_out'};
+  var reference,user,membership;
+  try{
+    reference=principal.provider&&principal.issuer&&this.identities.findActiveIdentity?this.identities.findActiveIdentity(principal.provider,principal.issuer,principal.subject):this.identities.findActive(principal.type,principal.subject);
+    user=reference&&this.users.get(reference.userId);
+    membership=user&&this.config.tenantId&&this.memberships.findActive(this.config.tenantId,user.id);
+  }catch(error){return {state:'ACCESS_UNAVAILABLE',route:'access-unavailable',reason:'account'};}
+  if(!user||String(user.status||'').toUpperCase()!=='ACTIVE')return {state:'ACCESS_UNAVAILABLE',route:'access-unavailable',reason:'account'};
+  if(!membership)return {state:'ACCESS_UNAVAILABLE',route:'access-unavailable',reason:'membership'};
+  try{this.entitlements.assertAllowed({tenantId:this.config.tenantId,userId:user.id,operation:'ATLAS_ENTRY'});}catch(error){return {state:'ACCESS_UNAVAILABLE',route:'access-unavailable',reason:'commercial'};}
+  var capabilities=new AtlasAuthorizationService_({config:this.config}).capabilitiesFor_(membership),definition=atlasRouteDefinition_(route);
+  if(!capabilities.length)return {state:'ACCESS_UNAVAILABLE',route:'access-unavailable',reason:'capability'};
+  if(!definition)return {state:'AUTHORIZED',route:route,capabilities:capabilities};
+  if(definition.capabilities&&definition.capabilities.length&&!definition.capabilities.some(function(capability){return capabilities.indexOf(capability)!==-1;}))return {state:'ACCESS_UNAVAILABLE',route:'access-unavailable',reason:'capability'};
+  if(route==='home')route=this.navigation.getModel({capabilities:capabilities},route).defaultRoute;
+  return {state:'AUTHORIZED',route:route,capabilities:capabilities,userId:user.id,tenantId:this.config.tenantId};
+};
+AtlasEntryRoutingService_.prototype.safeReturn_=function(route){var definition=atlasRouteDefinition_(route);return definition&&route!=='sign-in'&&route!=='auth-callback'?route:'home';};

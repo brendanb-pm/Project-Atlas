@@ -38,7 +38,7 @@ AtlasAuthorizationService_.prototype.execute = function (requiredCapability, ope
   var context;
   try { context=this.authorize_(requiredCapability,operationName); }
   catch(error) {
-    if (this.config.mode==='VALIDATION') { this.logValidation_(error,operationName); return operation(this.legacyContext_(operationName,'VALIDATION_UNENFORCED')); }
+    if (this.config.mode==='VALIDATION'&&!options.strictAuthorization) { this.logValidation_(error,operationName); return operation(this.legacyContext_(operationName,'VALIDATION_UNENFORCED')); }
     throw error;
   }
   if(!options.auditRequired)return operation(context);
