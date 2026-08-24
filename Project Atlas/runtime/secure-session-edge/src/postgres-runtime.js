@@ -44,6 +44,12 @@ export class PostgresRuntime {
   }
   async close() { await this.pool.end(); }
   async liveness() { return { live: true }; }
+  async rollbackSmoke(operation = 'TRANSACTION_ROLLBACK_SMOKE') {
+    let client;
+    try { client = await this.pool.connect(); await client.query('BEGIN READ ONLY'); await client.query('SELECT 1 AS transaction_smoke'); await client.query('ROLLBACK'); return { rolledBack: true }; }
+    catch (error) { try { await client?.query('ROLLBACK'); } catch { /* safe cleanup only */ } throw mapPgError(error); }
+    finally { client?.release(); }
+  }
 }
 
 export class PostgresTransaction {
