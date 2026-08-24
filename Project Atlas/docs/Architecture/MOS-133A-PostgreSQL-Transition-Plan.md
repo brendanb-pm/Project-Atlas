@@ -79,6 +79,17 @@ No phase uses permanent bidirectional dual-write. Shadow reads and one-way, time
 
 MOS-133B establishes the storage-neutral provider contract, server-controlled selection, bounded scoped reads, capability reporting, explicit Sheets non-transaction semantics, and representative Sheets adapter integration. It does not create PostgreSQL connectivity or a second source of truth. See `docs/Architecture/MOS-133B-Persistence-Provider-Contract.md`.
 
+### Secure-session implementation note
+
+SAAS-SESSION-EDGE-1B implements the preproduction Node edge/API contract in
+`runtime/secure-session-edge`: provider-neutral Google/Microsoft adapters,
+one-time state/nonce/PKCE callbacks, opaque host-only cookies, server-side session
+rotation/CSRF/revocation, and trusted request context. Its in-memory store is
+explicitly preproduction-only; production fails closed without the future
+PostgreSQL store. See `docs/ADR/ADR-SaaS-Tenant-Hosted-Secure-Session-Edge.md` and
+`runtime/secure-session-edge/README.md`. MOS-133C consumes this contract but does
+not receive permission to cut over a domain or activate live OIDC.
+
 ## First Domain Selection
 
 ### Selected: Customer and Contact directory

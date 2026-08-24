@@ -44,6 +44,21 @@ reauthorizes every protected operation against authoritative user, membership,
 active tenant, capability, and entitlement state. Successful provider login is
 not blanket Atlas authorization.
 
+## Implementation Status — SAAS-SESSION-EDGE-1B
+
+The repository contains an isolated Node 24 preproduction runtime at
+`runtime/secure-session-edge`. It deliberately runs the edge and API middleware
+in one process, uses maintained `jose` JWT/JWKS validation for live-provider
+adapters, and supplies deterministic Google/Microsoft test adapters only for
+automated preproduction evidence. It implements the opaque-session, CSRF,
+rotation, trusted-context, audit, rate-limit, and fail-closed store contracts in
+this ADR. The in-memory store and protected context route are preproduction-only.
+
+It is **not** a live OIDC deployment, PostgreSQL session store, Apps Script bridge,
+or Vitality cutover. MOS-133C replaces its memory store through the published
+session-store contract; a separately authorized activation validates tenant
+infrastructure, real provider configuration, and browser evidence.
+
 ## Hosting, Domain, and Tenant Discovery
 
 ### Hosting model

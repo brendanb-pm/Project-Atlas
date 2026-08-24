@@ -1,0 +1,17 @@
+{
+  "name": "atlas-secure-session-edge",
+  "version": "0.1.0-preproduction",
+  "private": true,
+  "type": "module",
+  "description": "Tenant-hosted Atlas secure-session edge; preproduction only until PostgreSQL storage and live OIDC activation are accepted.",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "jose": "6.2.10"
+  }
+}
