@@ -1,6 +1,12 @@
 function doGet(e) {
-  var requestedRoute=resolveAtlasRoute_(e),entry=new AtlasEntryRoutingService_().resolve(requestedRoute),route=entry.route,availability=entry.state==='AUTHORIZED'||entry.state==='PUBLIC'?atlasRouteAvailability_(route,getAtlasDeploymentProfile_()):{state:entry.state,message:''},template=entry.state==='SIGN_IN'?'SignIn':entry.state==='ACCESS_UNAVAILABLE'?'AccessUnavailable':availability.state==='AVAILABLE'?atlasRouteTemplate_(route):'UnsupportedRoute',view=HtmlService.createTemplateFromFile('UI/'+template);view.atlasRequestedRoute=route;view.atlasRequestedRecordId=entry.state==='AUTHORIZED'?resolveAtlasCommercialRecordId_(e,route):'';view.atlasRouteState=availability.state;view.atlasRouteMessage=availability.message;view.atlasIntendedRoute=entry.returnRoute||'home';view.atlasAuthState=entry.reason||'';
-  return view.evaluate().setTitle(atlasRouteTitle_(route)).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  var requestedRoute=resolveAtlasRoute_(e),entry=new AtlasEntryRoutingService_().resolve(requestedRoute),route=entry.route,availability=entry.state==='AUTHORIZED'||entry.state==='PUBLIC'?atlasRouteAvailability_(route,getAtlasDeploymentProfile_()):{state:entry.state,message:''},template=entry.state==='SIGN_IN'?'SignIn':entry.state==='ACCESS_UNAVAILABLE'?'AccessUnavailable':availability.state==='AVAILABLE'?atlasRouteTemplate_(route):'UnsupportedRoute';
+  try {
+    var view=HtmlService.createTemplateFromFile('UI/'+template);view.atlasRequestedRoute=route;view.atlasRequestedRecordId=entry.state==='AUTHORIZED'?resolveAtlasCommercialRecordId_(e,route):'';view.atlasRouteState=availability.state;view.atlasRouteMessage=availability.message;view.atlasIntendedRoute=entry.returnRoute||'home';view.atlasAuthState=entry.reason||'';
+    return view.evaluate().setTitle(atlasRouteTitle_(route)).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (ignored) {
+    var recovery=HtmlService.createTemplateFromFile('UI/RouteError');recovery.atlasRequestedRoute=route;
+    return recovery.evaluate().setTitle('Atlas workspace unavailable').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
 }
 function includeAtlasUi_(path){var content=HtmlService.createHtmlOutputFromFile(path).getContent();if(path==='UI/NavigationFrame')content=content.replace("<?!= includeAtlasUi_('UI/UnifiedCommandPalette') ?>",HtmlService.createHtmlOutputFromFile('UI/UnifiedCommandPalette').getContent());return content;}
 function authenticationCallable_(name,operation){try{var policy=ATLAS_CALLABLE_ENDPOINTS[name];if(!policy||policy.kind!=='PUBLIC_AUTH')throw new VmosAuthorizationError_('Authentication operation is unavailable.');enforceAbuseControl_(name,'NORMAL_READ',name);return {ok:true,data:operation()};}catch(error){return toClientError_(error);}}
