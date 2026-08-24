@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { errors } from './errors.js';
+import { DOMAIN_MIGRATIONS } from './domain-migrations.js';
 
 const foundationSql = `
 CREATE TABLE IF NOT EXISTS atlas_installation (
@@ -61,7 +62,10 @@ CREATE TABLE IF NOT EXISTS atlas_security_events (
   details JSONB NOT NULL DEFAULT '{}'::jsonb
 );`;
 
-export const FOUNDATION_MIGRATIONS = Object.freeze([{ id: '0001_postgres_foundation', sql: foundationSql, checksum: createHash('sha256').update(foundationSql).digest('hex') }]);
+export const FOUNDATION_MIGRATIONS = Object.freeze([
+  { id: '0001_postgres_foundation', sql: foundationSql, checksum: createHash('sha256').update(foundationSql).digest('hex') },
+  ...DOMAIN_MIGRATIONS
+]);
 
 export class PostgresMigrationRunner {
   constructor({ runtime, migrations = FOUNDATION_MIGRATIONS, lock = null } = {}) { if (!runtime) throw new Error('Migration runner requires PostgreSQL runtime.'); this.runtime = runtime; this.migrations = migrations; this.lock = lock; }

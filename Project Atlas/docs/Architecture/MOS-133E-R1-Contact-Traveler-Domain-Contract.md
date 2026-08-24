@@ -1,10 +1,11 @@
 # MOS-133E-R1 — Contact and Traveler Domain Contract
 
-**Status:** CONTACT REQUIRES PRODUCT DECISION; TRAVELER CONTRACT RESOLVED.
+**Status:** superseded for Contact by the approved MOS-133E-R2 product contract;
+Traveler contract remains accepted.
 
-This record resolves only the evidence needed to continue PostgreSQL schema work
-safely. It creates no schema, migration, repository, data conversion, or
-production change.
+This R1 evidence record created no schema, migration, repository, data conversion,
+or production change. Its Contact conclusion is superseded only by the explicit
+R2 product decision; the Traveler evidence and decision remain authoritative.
 
 ## Contact evidence and decision
 
@@ -16,31 +17,31 @@ Contact lifecycle service. The Sales Activity architecture explicitly describes
 `ContactID` as an optional future reference; it does not establish a Contact
 model.
 
-**Decision: D — unresolved legacy/future reference.** `ContactID` is not proof
-of a first-class Contact aggregate, a customer-owned entity, or a stable external
-identifier. Atlas must not create a PostgreSQL `contact` table, a Contact foreign
-key, or synthetic contact records from it in MOS-133E.
+**Original evidence conclusion:** `ContactID` alone did not establish a Contact
+aggregate. **R2 product decision:** Contact is now an approved first-class,
+tenant-owned CRM entity subordinate to exactly one Customer. Its stable canonical
+ID is `CONTACT-<UUID>`; `CustomerID` is required; normal deletion is archive-only;
+and it may not be reparented in an ordinary update. The canonical field set is
+`ContactID`, `TenantID`, `CustomerID`, `DisplayName`, `Email`, `Phone`,
+`TitleRole`, `Status`, `Version`, `CreatedAt`, and `UpdatedAt`.
 
 ### Migration implications
 
-- Preserve a nonblank historical `ContactID` as an opaque legacy value during a
-  future export only after its source meaning is recorded; do not resolve it as a
-  relational foreign key.
-- Blank values remain blank. Orphan/unresolvable values are retained for
-  reconciliation and reported, never silently attached to a Customer.
+- A resolved historical `ContactID` may become a relational FK only after a
+  deterministic accepted canonical-Contact match.
+- Blank values become `NULL`. Orphan/unresolvable values are retained as
+  migration/reconciliation evidence and reported, never silently attached to a
+  Customer or synthesized into a Contact.
 - `Customer.primaryContact` remains display text. It must not become a Contact ID
   and cannot by itself create a Contact row.
 - Duplicate contact-like names, emails, and phones require a later approved
   matching/reconciliation policy; no automatic deduplication is authorized.
 
-### Required decision before Contact schema work
-
-Define whether Contact is first-class or customer-owned, its canonical ID source,
-tenant and Customer ownership/nullability, demonstrated fields, active/archive and
-version behavior, permitted reparenting/deletion, uniqueness/search policy, and
-the migration/reconciliation policy for legacy `ContactID` values. Until then,
-RFQ and Sales Activity may retain the opaque legacy field outside relational
-authority.
+The approved R2 contract requires no uniqueness on email, phone, display name, or
+title. RFQ and Sales Activity `ContactID` remain optional; when populated they
+must be same-tenant and Customer-consistent. `Customer.primaryContact` remains
+legacy Customer-owned display text, not Contact identity and never an automatic
+Contact source.
 
 ## Traveler / operations evidence and decision
 
@@ -78,15 +79,14 @@ one.
   TenantID and tenant-safe relationships.
 - Preserve the current-state/history split: mutable Job state and append-only Job
   Events. QR rotation revokes the old opaque token and creates a replacement.
-- Do not add Contact tables or relational Contact foreign keys before the required
-  Contact decision.
+- Create the approved Customer-owned Contact schema and relational foreign keys;
+  leave legacy-contact reconciliation to MOS-133F/G tooling.
 - Do not conflate traveler rendering with a persisted business aggregate.
 
 ## Open decisions
 
-1. Contact canonical domain contract and legacy-contact reconciliation policy.
-2. Whether future operations require first-class work-step records beyond Job
+1. Whether future operations require first-class work-step records beyond Job
    workflow state and Job Events.
 
-MOS-133E remains blocked only on decision 1 for Contact-dependent foreign keys;
-the Traveler decision itself is sufficient for the demonstrated operational model.
+MOS-133E-R2 resolved the Contact blocker. The Traveler decision itself remains
+sufficient for the demonstrated operational model.
