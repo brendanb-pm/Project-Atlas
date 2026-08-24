@@ -63,14 +63,15 @@ The SQL target must retain MOS-120 bounded envelopes and the Codex performance b
 | Phase | Objective and scope | Prerequisites | Validation/cutover/rollback | Principal risk |
 |---|---|---|---|---|
 | 0 — Contract stabilization (MOS-133B) | Define storage-neutral query, transaction, command, error and health contracts; inventory direct Sheets dependencies | accepted ADR | contract tests against Sheets; no cutover | leaking Sheets or SQL semantics into services |
-| 1 — Runtime/provider foundation (secure-session story + MOS-133C) | Tenant API boundary, PostgreSQL connection/pooling/provider skeleton, local entitlement and health interfaces | MOS-133B; secure-session design | connectivity/authorization/failure fixtures; no business cutover | creating a second weak auth boundary |
-| 2 — Schema/migrations/readiness (MOS-133E then MOS-133D) | versioned relational schema, migration engine, cloud readiness/install workflow | provider/runtime foundation | ephemeral AWS/Azure-compatible test targets; migration failure/restore drills | unsafe privilege or partial upgrade |
-| 3 — First domain (MOS-133F) | Customer/Contact authoritative PostgreSQL persistence and indexed directory queries | schema and installer | export/import, shadow reads, counts/relationships, brief write freeze, explicit provider switch | identity/reference drift |
-| 4 — Commercial/CRM | RFQ, Quote/revision/cost/source, Follow-Up, Sales Activity | Customer success; exact-money/recovery fixtures | domain reconciliation and atomic lifecycle acceptance | aggregate and financial history integrity |
-| 5 — Operations | Jobs, Travelers/operations, My Work, Daily Production, Floor Board | commercial provenance available | due/readiness/event reconciliation; performance proof | operational outage/cutover timing |
-| 6 — Purchasing/finance | Vendors, requests/approvals/receipts, invoices/payments | Customer/Job references and financial controls | exact-money, separation-of-duty, command replay and reconciliation | financial split state |
-| 7 — Identity/security | users, memberships, external identities, sessions, audit/operation ledger | secure edge proven; tenant runtime stable | adversarial auth/tenant/audit/revocation/recovery acceptance | lockout or authority bypass |
-| 8 — Vitality and compatibility (MOS-133G/H) | production migration tooling, accepted cutover, Sheets read-only/export retirement | all required domains accepted | full reconciliation, rollback rehearsal, live acceptance | incomplete historical migration |
+| 1 — Secure-session contract and implementation (SAAS-SESSION-EDGE-1A/1B) | Tenant-hosted OIDC/session/CSRF/revocation edge and trusted API-context contract | MOS-133B; R5 limitation evidence | adversarial session and preproduction deployment acceptance; no business cutover | creating a second weak auth boundary |
+| 2 — Runtime/provider foundation (MOS-133C) | Tenant API boundary, PostgreSQL connection/pooling/provider skeleton, local entitlement and health interfaces | 1B trusted-context contract implemented; MOS-133B | connectivity/authorization/failure fixtures against disposable/preproduction infrastructure; no business cutover | allowing a production data boundary before the secure edge is proven |
+| 3 — Schema/migrations/readiness (MOS-133E then MOS-133D) | versioned relational schema, migration engine, cloud readiness/install workflow | provider/runtime foundation | ephemeral AWS/Azure-compatible test targets; migration failure/restore drills | unsafe privilege or partial upgrade |
+| 4 — First domain (MOS-133F) | Customer/Contact authoritative PostgreSQL persistence and indexed directory queries | schema and installer | export/import, shadow reads, counts/relationships, brief write freeze, explicit provider switch | identity/reference drift |
+| 5 — Commercial/CRM | RFQ, Quote/revision/cost/source, Follow-Up, Sales Activity | Customer success; exact-money/recovery fixtures | domain reconciliation and atomic lifecycle acceptance | aggregate and financial history integrity |
+| 6 — Operations | Jobs, Travelers/operations, My Work, Daily Production, Floor Board | commercial provenance available | due/readiness/event reconciliation; performance proof | operational outage/cutover timing |
+| 7 — Purchasing/finance | Vendors, requests/approvals/receipts, invoices/payments | Customer/Job references and financial controls | exact-money, separation-of-duty, command replay and reconciliation | financial split state |
+| 8 — Identity/security | users, memberships, external identities, sessions, audit/operation ledger | secure edge proven; tenant runtime stable | adversarial auth/tenant/audit/revocation/recovery acceptance | lockout or authority bypass |
+| 9 — Vitality and compatibility (MOS-133G/H) | production migration tooling, accepted cutover, Sheets read-only/export retirement | all required domains accepted | full reconciliation, rollback rehearsal, live acceptance | incomplete historical migration |
 
 No phase uses permanent bidirectional dual-write. Shadow reads and one-way, time-bounded delta capture are permitted only with a removal date and reconciliation evidence.
 
@@ -191,8 +192,9 @@ Every implementation story must test:
 | Story | Objective | Dependencies | Complexity | Principal risk | Acceptance boundary | Production changes? |
 |---|---|---|---|---|---|---|
 | MOS-133B — Persistence Provider Contract | Storage-neutral CRUD/query/transaction/idempotency/error/health interfaces and contract tests | MOS-133A | High | leaking adapter semantics or weakening MOS-121 proof | Sheets provider passes contract; no SQL implementation required | No |
-| SAAS SECURE-SESSION EDGE | Tenant-hosted OIDC/session/CSRF/revocation boundary and API trust contract | MOS-133B interface context; R5 evidence | High | identity/session bypass or vendor dependency | provider-neutral adversarial session acceptance; no business-domain cutover | Test/preproduction only initially |
-| MOS-133C — PostgreSQL Provider Foundation | tenant API runtime, pooling, parameterized provider, roles, health, entitlement-cache interfaces | MOS-133B; secure-edge architecture fixed | High | unsafe credentials/pooling/tenant routing | provider contract and failure tests against disposable PostgreSQL | Test/preproduction infrastructure |
+| SAAS-SESSION-EDGE-1A — Secure-Session Edge Architecture | tenant-hosted OIDC/session/CSRF/revocation and API-trust ADR | MOS-133B interface context; R5 evidence | High | identity/session bypass or vendor dependency | architecture accepted; no runtime changes | No |
+| SAAS-SESSION-EDGE-1B — Secure-Session Edge Implementation | provider-neutral edge/API session middleware and preproduction adversarial acceptance | 1A; approved runtime, domain, secret, and provider-ownership decisions | Very high | weak browser session or cross-tenant authority | trusted context and preproduction security/deployment acceptance | Test/preproduction only initially |
+| MOS-133C — PostgreSQL Provider Foundation | tenant API runtime, pooling, parameterized provider, roles, health, entitlement-cache interfaces | MOS-133B; 1B trusted-context contract implemented | High | unsafe credentials/pooling/tenant routing | provider contract and failure tests against disposable PostgreSQL | Test/preproduction infrastructure |
 | MOS-133E — Schema + Migration Framework | base schema, version table, checksummed migrations, lock, compatibility, rollback/restore runbooks | MOS-133C | High | partial/destructive migration | fresh install, upgrade, contention and injected-failure acceptance | Test/preproduction DB |
 | MOS-133D — Tenant Database Installation / Readiness Wizard | guided AWS/Azure setup/readiness, secrets references, migrations, smoke and go-live report | MOS-133C/E | High | unsafe cloud guidance or false readiness | blocking 23-step readiness contract on both supported targets | Test/preproduction cloud; production only when tenant authorizes later |
 | MOS-133F — First Domain PostgreSQL Migration | Customer/Contact import, indexed queries, authoritative cutover contract | MOS-133C/D/E | High | relationship drift or split authority | counts/FKs/search/security/performance/rollback acceptance | Later authorized tenant cutover |
@@ -204,15 +206,16 @@ Every implementation story must test:
 1. Publish and live-accept R6 under its own activation story; MOS-133A does not publish it.
 2. Close remaining R5 live evidence specifically enough to support the target edge; do not treat Apps Script validation as SaaS session acceptance.
 3. MOS-133B — Persistence Provider Contract.
-4. SAAS SECURE-SESSION EDGE — architecture/foundation, before any production domain cutover.
-5. MOS-133C — PostgreSQL Provider Foundation and tenant API skeleton.
-6. MOS-133E — Schema + Migration Framework.
-7. MOS-133D — Tenant Database Installation / Readiness Wizard.
-8. MOS-133F — Customer/Contact first-domain migration in disposable/preproduction environments.
-9. Commercial/CRM then Jobs/operations, purchasing/finance, and identity/security domain stories under the phase model.
-10. MOS-133G — Vitality migration dry runs, reconciliation, rollback rehearsal, then separately authorized cutover.
-11. External-tenant pilot with tenant cloud administrator acceptance, measured performance, backup/restore, and security evidence.
-12. MOS-133H — Sheets retirement/compatibility after accepted pilot and rollback windows.
+4. SAAS-SESSION-EDGE-1A — secure-session edge architecture.
+5. SAAS-SESSION-EDGE-1B — implement and preproduction-accept the trusted session/API context before MOS-133C production-boundary finalization.
+6. MOS-133C — PostgreSQL Provider Foundation and tenant API skeleton using the 1B contract.
+7. MOS-133E — Schema + Migration Framework.
+8. MOS-133D — Tenant Database Installation / Readiness Wizard.
+9. MOS-133F — Customer/Contact first-domain migration in disposable/preproduction environments.
+10. Commercial/CRM then Jobs/operations, purchasing/finance, and identity/security domain stories under the phase model.
+11. MOS-133G — Vitality migration dry runs, reconciliation, rollback rehearsal, then separately authorized cutover.
+12. External-tenant pilot with tenant cloud administrator acceptance, measured performance, backup/restore, and security evidence.
+13. MOS-133H — Sheets retirement/compatibility after accepted pilot and rollback windows.
 
 ## Activation Dependencies and Post-Decision Evidence
 
