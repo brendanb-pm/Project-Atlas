@@ -50,7 +50,9 @@ const context = vm.createContext({
 [
   'Utilities/Errors.gs',
   'Utilities/Serialization.gs',
+  'ConfigPersistence.gs',
   'Repository/SheetsRepository.gs',
+  'Repository/PersistenceProvider.gs',
   'ConfigOperational.gs',
   'Repository/OperationalRepositories.gs',
   'Utilities/OperationalPersistence.gs'

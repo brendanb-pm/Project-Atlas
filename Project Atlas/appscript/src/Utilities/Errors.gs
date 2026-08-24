@@ -6,6 +6,16 @@ function VmosConfigurationError_(message) { VmosError_.call(this, message, 'CONF
 VmosConfigurationError_.prototype = Object.create(VmosError_.prototype);
 function VmosNotFoundError_(message) { VmosError_.call(this, message, 'NOT_FOUND'); this.name = 'VmosNotFoundError_'; }
 VmosNotFoundError_.prototype = Object.create(VmosError_.prototype);
+function VmosConflictError_(message) { VmosError_.call(this, message || 'This record changed elsewhere.', 'CONFLICT'); this.name = 'VmosConflictError'; }
+VmosConflictError_.prototype = Object.create(VmosError_.prototype);
+/* Legacy internal call sites use this constructor alias; it is not callable UI API. */
+var VmosConflictError = VmosConflictError_;
+function VmosProviderUnavailableError_(message) { VmosError_.call(this, message || 'The selected storage provider is unavailable.', 'PROVIDER_UNAVAILABLE'); this.name = 'VmosProviderUnavailableError_'; }
+VmosProviderUnavailableError_.prototype = Object.create(VmosError_.prototype);
+function VmosTransactionUnsupportedError_(message) { VmosError_.call(this, message || 'The selected storage provider does not support this transaction.', 'TRANSACTION_UNSUPPORTED'); this.name = 'VmosTransactionUnsupportedError_'; }
+VmosTransactionUnsupportedError_.prototype = Object.create(VmosError_.prototype);
+function VmosSchemaCompatibilityError_(message) { VmosError_.call(this, message || 'The selected storage provider is not compatible with this Atlas release.', 'SCHEMA_INCOMPATIBLE'); this.name = 'VmosSchemaCompatibilityError_'; }
+VmosSchemaCompatibilityError_.prototype = Object.create(VmosError_.prototype);
 function VmosThrottleError_(message, retryAfterSeconds) { VmosError_.call(this, message, 'THROTTLED'); this.name = 'VmosThrottleError_'; this.retryAfterSeconds = retryAfterSeconds || 1; }
 VmosThrottleError_.prototype = Object.create(VmosError_.prototype);
 
@@ -38,6 +48,8 @@ function safeClientError_(error, referenceId) {
     CONFIGURATION_ERROR: 'This feature is not configured.',
     CONFIGURATION_UNAVAILABLE: 'This feature is not configured.',
     PROVIDER_UNAVAILABLE: 'The connected service is temporarily unavailable.',
+    TRANSACTION_UNSUPPORTED: 'This storage capability is unavailable for this request.',
+    SCHEMA_INCOMPATIBLE: 'This Atlas installation requires an approved update before continuing.',
     THROTTLED: error && error.message || 'Too many requests. Wait briefly, then try again.',
     UNKNOWN_OUTCOME: 'The result could not be confirmed. Refresh the record before trying again.',
     OPERATION_IN_PROGRESS: 'This request is already being processed. Refresh shortly to confirm the result.'

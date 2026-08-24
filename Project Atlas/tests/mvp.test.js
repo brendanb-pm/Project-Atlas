@@ -8,7 +8,7 @@ const context = vm.createContext({ console, Date, JSON, String, Number, Error, i
   LockService: { getDocumentLock: () => null, getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Session: { getScriptTimeZone: () => 'UTC', getActiveUser: () => ({ getEmail: () => 'operator@example.com' }), getEffectiveUser: () => ({ getEmail: () => 'operator@example.com' }) }, Utilities: { formatDate: () => '26' }
 });
-['Config.gs', 'Utilities/Errors.gs', 'Utilities/Serialization.gs', 'Utilities/Validation.gs', 'Utilities/IdGenerator.gs', 'Repository/SheetsRepository.gs', 'Services/MvpServices.gs'].forEach((file) => vm.runInContext(fs.readFileSync(path.join(base, file), 'utf8'), context));
+['Config.gs', 'ConfigPersistence.gs', 'Utilities/Errors.gs', 'Utilities/Serialization.gs', 'Utilities/Validation.gs', 'Utilities/IdGenerator.gs', 'Repository/SheetsRepository.gs', 'Repository/PersistenceProvider.gs', 'Services/MvpServices.gs'].forEach((file) => vm.runInContext(fs.readFileSync(path.join(base, file), 'utf8'), context));
 const mapping = context.VMOS_DEFAULT_MAPPING;
 context.getVmosConfig_ = () => ({ mapping });
 context.createRepository_ = (entity) => ({

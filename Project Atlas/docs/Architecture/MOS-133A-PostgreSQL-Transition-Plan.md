@@ -74,6 +74,10 @@ The SQL target must retain MOS-120 bounded envelopes and the Codex performance b
 
 No phase uses permanent bidirectional dual-write. Shadow reads and one-way, time-bounded delta capture are permitted only with a removal date and reconciliation evidence.
 
+### MOS-133B implementation note
+
+MOS-133B establishes the storage-neutral provider contract, server-controlled selection, bounded scoped reads, capability reporting, explicit Sheets non-transaction semantics, and representative Sheets adapter integration. It does not create PostgreSQL connectivity or a second source of truth. See `docs/Architecture/MOS-133B-Persistence-Provider-Contract.md`.
+
 ## First Domain Selection
 
 ### Selected: Customer and Contact directory

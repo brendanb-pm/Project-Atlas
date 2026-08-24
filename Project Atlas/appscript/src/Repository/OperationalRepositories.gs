@@ -1,7 +1,7 @@
 /** Repository wrappers for append-only job events and opaque QR tokens. */
 function createOperationalRepository_(entityName, mapping) {
   var config = getShopOperationalConfig_();
-  return new SheetsRepository_(entityName, mapping, SpreadsheetApp.openById(config.spreadsheetId));
+  return createAtlasPersistenceProvider_({ entityName: entityName, definition: mapping, spreadsheet: SpreadsheetApp.openById(config.spreadsheetId), tenantField: mapping.fields.securityTenantId ? 'securityTenantId' : '' , appendOnly: entityName === 'JobEvent' });
 }
 
 function JobEventRepository_() {

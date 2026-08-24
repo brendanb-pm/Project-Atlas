@@ -85,4 +85,8 @@ SheetsRepository_.prototype.updateById = function (id, changes) {
   });
   return this.findById(id);
 };
-function createRepository_(entityName) { var config = getVmosConfig_(); if (!config.mapping[entityName]) throw new VmosConfigurationError_('No mapping configured for ' + entityName + '.'); return new SheetsRepository_(entityName, config.mapping[entityName], SpreadsheetApp.openById(config.spreadsheetId)); }
+function createRepository_(entityName) {
+  var config = getVmosConfig_();
+  if (!config.mapping[entityName]) throw new VmosConfigurationError_('No mapping configured for ' + entityName + '.');
+  return createAtlasPersistenceProvider_({ entityName: entityName, definition: config.mapping[entityName], spreadsheet: SpreadsheetApp.openById(config.spreadsheetId), tenantField: 'securityTenantId' });
+}
