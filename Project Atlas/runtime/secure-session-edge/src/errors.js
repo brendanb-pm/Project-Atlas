@@ -18,6 +18,9 @@ export const errors = {
   providerUnavailable: () => new EdgeError('PROVIDER_UNAVAILABLE', 'This sign-in provider is temporarily unavailable.', 503),
   sessionStoreUnavailable: () => new EdgeError('SESSION_STORE_UNAVAILABLE', 'Sign-in is temporarily unavailable. Try again.', 503),
   entitlementUnavailable: () => new EdgeError('ENTITLEMENT_UNAVAILABLE', 'Access is temporarily unavailable. Try again.', 503),
+  persistenceUnavailable: () => new EdgeError('PERSISTENCE_UNAVAILABLE', 'The service is temporarily unavailable. Try again.', 503),
+  schemaIncompatible: () => new EdgeError('SCHEMA_INCOMPATIBLE', 'A compatible application upgrade is required.', 503),
+  persistenceConflict: () => new EdgeError('CONFLICT', 'This record changed. Refresh and try again.', 409),
   invalidInput: () => new EdgeError('INVALID_REQUEST', 'The request could not be completed.', 400),
   notFound: () => new EdgeError('NOT_FOUND', 'This route is unavailable.', 404)
 };

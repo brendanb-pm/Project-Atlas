@@ -68,9 +68,7 @@ export class PreproductionAuthAttemptStore {
 export class SessionService {
   constructor({ store, clock = () => new Date(), policy }) { this.store = store; this.clock = clock; this.policy = policy; }
   async create({ userId, provider, issuer, subject, permittedTenants, activeTenant = '', authenticatedAt, authenticationContext = 'OIDC' }) {
-    const now = this.clock(), opaque = randomOpaque(48), id = `session-${randomOpaque(18)}`;
-    const record = { id, opaqueHash: hash(opaque), csrfHash: hash(randomOpaque(32)), userId, provider, issuer, subject, permittedTenants: [...permittedTenants], activeTenant, issuedAt: now.toISOString(), authenticatedAt: new Date(authenticatedAt || now).toISOString(), lastActivityAt: now.toISOString(), idleExpiresAt: new Date(now.getTime() + this.policy.idleSeconds * 1000).toISOString(), absoluteExpiresAt: new Date(now.getTime() + this.policy.absoluteSeconds * 1000).toISOString(), revokedAt: '', revocationReason: '', status: activeTenant ? 'ACTIVE' : 'PENDING_TENANT', version: 1, authenticationContext };
-    const csrf = randomOpaque(32); record.csrfHash = hash(csrf); await this.store.create(record); return { record, opaque, csrf };
+    const created = this.build({ userId, provider, issuer, subject, permittedTenants, activeTenant, authenticatedAt, authenticationContext }); await this.store.create(created.record); return created;
   }
   async resolve(opaque, { allowPending = false } = {}) {
     const record = await this.store.getByOpaque(opaque), now = this.clock().getTime();
@@ -84,13 +82,21 @@ export class SessionService {
   }
   async touch(record) {
     const now = this.clock(); if (new Date(record.absoluteExpiresAt).getTime() <= now.getTime()) throw errors.expired();
-    return this.store.update(record.id, { lastActivityAt: now.toISOString(), idleExpiresAt: new Date(Math.min(now.getTime() + this.policy.idleSeconds * 1000, new Date(record.absoluteExpiresAt).getTime())).toISOString() });
+    const idleExpiresAt = new Date(Math.min(now.getTime() + this.policy.idleSeconds * 1000, new Date(record.absoluteExpiresAt).getTime()));
+    return this.store.touch ? this.store.touch(record.id, now, idleExpiresAt) : this.store.update(record.id, { lastActivityAt: now.toISOString(), idleExpiresAt: idleExpiresAt.toISOString() });
   }
   async validateCsrf(record, csrf) { if (!csrf || !equalsHash(csrf, record.csrfHash)) throw errors.csrf(); }
   async rotateCsrf(record) { const csrf = randomOpaque(32); await this.store.update(record.id, { csrfHash: hash(csrf) }); return csrf; }
   async rotate(record, activeTenant) {
-    const created = await this.create({ userId: record.userId, provider: record.provider, issuer: record.issuer, subject: record.subject, permittedTenants: record.permittedTenants, activeTenant, authenticatedAt: record.authenticatedAt, authenticationContext: record.authenticationContext });
+    const created = this.build({ userId: record.userId, provider: record.provider, issuer: record.issuer, subject: record.subject, permittedTenants: record.permittedTenants, activeTenant, authenticatedAt: record.authenticatedAt, authenticationContext: record.authenticationContext });
+    if (this.store.rotate) return { ...created, record: await this.store.rotate(record.id, created.record) };
+    await this.store.create(created.record);
     await this.store.update(record.id, { status: 'REVOKED', revokedAt: this.clock().toISOString(), revocationReason: 'ROTATED', replacedBy: created.record.id }); return created;
+  }
+  build({ userId, provider, issuer, subject, permittedTenants, activeTenant = '', authenticatedAt, authenticationContext = 'OIDC' }) {
+    const now = this.clock(), opaque = randomOpaque(48), id = `session-${randomOpaque(18)}`, csrf = randomOpaque(32);
+    const record = { id, opaqueHash: hash(opaque), csrfHash: hash(csrf), userId, provider, issuer, subject, permittedTenants: [...permittedTenants], activeTenant, issuedAt: now.toISOString(), authenticatedAt: new Date(authenticatedAt || now).toISOString(), lastActivityAt: now.toISOString(), idleExpiresAt: new Date(now.getTime() + this.policy.idleSeconds * 1000).toISOString(), absoluteExpiresAt: new Date(now.getTime() + this.policy.absoluteSeconds * 1000).toISOString(), revokedAt: '', revocationReason: '', status: activeTenant ? 'ACTIVE' : 'PENDING_TENANT', version: 1, authenticationContext };
+    return { record, opaque, csrf };
   }
   async revoke(record, reason = 'LOGOUT') { return this.store.update(record.id, { status: 'REVOKED', revokedAt: this.clock().toISOString(), revocationReason: reason }); }
 }

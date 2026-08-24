@@ -1,8 +1,9 @@
 # Atlas secure-session edge — preproduction runtime
 
-**Status:** IMPLEMENTED FOR PREPRODUCTION TESTING ONLY. It is not deployed,
-connected to PostgreSQL, configured with real provider credentials, or integrated
-with the current Apps Script application.
+**Status:** IMPLEMENTED FOR LOCAL/PREPRODUCTION VALIDATION ONLY. It is not
+deployed, configured with real provider credentials, or integrated with the
+current Apps Script application. MOS-133C adds PostgreSQL runtime/provider/session
+code; it has not connected to a tenant database or performed a business-domain cutover.
 
 This package is the first tenant-hosted Atlas edge/API boundary. It runs one Node
 process containing the HTTP edge and trusted API middleware. Keeping them in one
@@ -23,6 +24,9 @@ tenant authority.
   responses, security headers, bounded input, and rate-limit hooks;
 - a protected **preproduction-only** context harness proving that forged browser
   tenant/user/capability fields are ignored.
+- a server-only PostgreSQL 17-compatible pool, parameterized foundation provider,
+  durable opaque-session store, checksummed migration runner, and safe readiness
+  contract. `pg` 8.16.3 is the maintained pool/client; `pg-mem` is test-only.
 
 The production configuration refuses the in-memory session store and refuses
 preproduction test routes/providers. If a required production store is absent,
@@ -54,24 +58,54 @@ installation identity, session policy, and a PostgreSQL session store. OIDC clie
 secrets, if needed, live exclusively in tenant secret management. Do not put them
 in source, package files, browser JavaScript, URLs, logs, or Sheets.
 
-`jose` is the only runtime dependency and performs live ID-token/JWKS validation;
-the package does not implement JWT cryptography itself. Node's standard `crypto`
-is used only for opaque random values, hashes, and PKCE S256.
+`jose` performs ID-token/JWKS validation and `pg` provides PostgreSQL pooling;
+the package does not implement JWT or database protocols itself. Node's standard
+`crypto` is used only for opaque random values, hashes, cursor integrity, and PKCE S256.
 
-## MOS-133C handoff
+## PostgreSQL foundation (MOS-133C)
 
-MOS-133C must replace `PreproductionMemorySessionStore` with a PostgreSQL session
-store implementing the same methods: `create`, `getByOpaque`, `get`, `update`,
-`listActiveForUser`, `revokeAllForUser`, and `cleanupExpired`. The schema requires
-opaque and CSRF hashes, user/provider/issuer/subject, permitted and active tenant,
-issued/authenticated/activity/idle/absolute timestamps, status, version/rotation,
-and revocation fields. Queries must be tenant-installation scoped, bounded, and
-transaction-safe; session rotation must atomically create the replacement and
-invalidate the prior record.
+`createPostgresFoundation` is the server/install-controlled assembly point. It
+requires `database.provider = POSTGRESQL`, an injected tenant secret provider,
+and a server-only cursor integrity secret. It creates separate application and
+migration runtimes: the application role performs bounded parameterized reads and
+writes; only the migration role can apply ordered, checksummed migrations. The
+normal runtime never auto-runs privileged migrations and never falls back to
+Sheets or an in-memory session store if PostgreSQL is selected.
 
-MOS-133C also supplies tenant runtime database connectivity, installation identity,
-health/readiness, migrations, and the persistence-provider implementation. It may
-not replace the trusted request-context or fail-closed production-store contract.
+Production requires TLS with certificate verification, a bounded pool (default
+maximum 10), acquisition/query timeouts, and a PostgreSQL session store. The
+foundation schema is deliberately limited to migration metadata, installation
+identity, opaque hashed sessions, security-event append storage, and a minimal
+provider-contract test entity. It does **not** create Customer, Quote, Job, or
+other business-domain tables.
+
+Routine provider reads require an authoritative `{ tenantId, userId }` scope, an
+explicit limit (maximum 200), stable allow-listed ordering, and an integrity-bound
+keyset cursor. Values are query parameters; identifiers/order fields are fixed
+server allow lists. Session cleanup is a bounded maintenance operation, not a
+normal-request scan. Session activity touch is coalesced by a configured interval.
+
+`npm test` uses `pg-mem` only as a deterministic SQL-contract harness. Its
+transaction emulator is not accepted as PostgreSQL 17 transactional evidence;
+the suite separately verifies the runtime's one-client `BEGIN`/`ROLLBACK` path.
+Real PostgreSQL 17, RDS, and Azure Flexible Server acceptance remains **NOT YET
+MEASURED** because this workspace has no Docker, `psql`, or local PostgreSQL service.
+
+## MOS-133E / MOS-133D handoff
+
+MOS-133E owns canonical domain schema: explicit `TenantID`, canonical text IDs,
+UTC `TIMESTAMPTZ`, `NUMERIC` money/rates, integer optimistic versions, archive
+timestamps, immutable history/event tables, composite tenant-safe foreign keys,
+and per-access-pattern indexes. It uses this runner's forward-only checksummed
+migrations, one migration role, advisory lock, readiness compatibility check,
+transaction primitive, and idempotency uniqueness pattern. It must not alter
+applied migration content.
+
+MOS-133D owns the tenant installer/readiness flow: endpoint and TLS validation,
+secret references, separate application/migration credentials, PostgreSQL version
+and installation-tenant validation, controlled migration execution, session and
+transaction smoke tests, backup acknowledgement, and post-restore compatibility.
+No source component accepts browser-selected provider/database/tenant authority.
 
 ## Still required before live activation
 

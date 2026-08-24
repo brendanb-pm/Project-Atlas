@@ -1,5 +1,15 @@
 # MOS-133A — PostgreSQL Transition Plan and Backlog
 
+> **MOS-133C implementation update (source/local only):** The tenant runtime now
+> contains `pg` 8.16.3 configuration/pooling, explicit application versus migration
+> roles, production TLS validation, PostgreSQL session persistence, a bounded
+> parameterized provider, checksummed migration/readiness foundations, and an
+> isolated `pg-mem` contract harness. No business domain has moved; Sheets remains
+> authoritative for existing tenants; no dual-write, tenant DB, cloud resource, or
+> production deployment exists. Real PostgreSQL 17/RDS/Azure timing and integration
+> acceptance are **NOT YET MEASURED**. MOS-133D validates installation readiness;
+> MOS-133E owns canonical domain schema.
+
 Status: Architecture accepted for implementation planning
 
 Repository baseline: `803ad79945723ac48cbe82f000fbbee30d542fc6`

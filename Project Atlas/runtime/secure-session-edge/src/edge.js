@@ -12,10 +12,10 @@ export function createEdgeConfig(input = {}) {
   const production = environment === 'production';
   if (!['development', 'test', 'preproduction', 'production'].includes(environment) || !/^https:\/\/[A-Za-z0-9.-]+(?::\d+)?$/.test(input.origin || '')) throw new Error('Secure-session edge configuration is invalid.');
   if (production && input.preproductionTestHarness) throw new Error('Preproduction test routes cannot be enabled in production.');
-  if (production && input.sessionStoreKind === 'memory') throw new Error('Production requires a PostgreSQL-backed session store.');
+  if (production && input.sessionStoreKind !== 'postgresql') throw new Error('Production requires a PostgreSQL-backed session store.');
   const policy = input.policy || {};
   for (const value of [policy.idleSeconds ?? 1800, policy.absoluteSeconds ?? 28800, policy.attemptSeconds ?? 300]) if (!Number.isInteger(value) || value < 60 || value > 86400) throw new Error('Secure-session timing policy is invalid.');
-  return Object.freeze({ environment, production, origin: input.origin, allowedRoutes: Object.freeze(input.allowedRoutes || ['home']), providers: input.providers || {}, preproductionTestHarness: input.preproductionTestHarness === true, sessionStoreKind: input.sessionStoreKind || (production ? 'postgresql-required' : 'memory'), policy: Object.freeze({ idleSeconds: policy.idleSeconds ?? 1800, absoluteSeconds: policy.absoluteSeconds ?? 28800, attemptSeconds: policy.attemptSeconds ?? 300 }), rateLimit: Object.freeze(input.rateLimit || { windowMs: 60000, max: 30 }) });
+  return Object.freeze({ environment, production, origin: input.origin, allowedRoutes: Object.freeze(input.allowedRoutes || ['home']), providers: input.providers || {}, preproductionTestHarness: input.preproductionTestHarness === true, sessionStoreKind: input.sessionStoreKind || (production ? 'postgresql' : 'memory'), policy: Object.freeze({ idleSeconds: policy.idleSeconds ?? 1800, absoluteSeconds: policy.absoluteSeconds ?? 28800, attemptSeconds: policy.attemptSeconds ?? 300 }), rateLimit: Object.freeze(input.rateLimit || { windowMs: 60000, max: 30 }) });
 }
 
 export class MemoryAuditSink {
@@ -33,11 +33,11 @@ export class SlidingRateLimiter {
   }
 }
 
-export function createPreproductionEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
+export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
   const config = createEdgeConfig(rawConfig);
   if (!authority || !providers) throw new Error('Secure-session edge dependencies are required.');
   if (config.production && Object.values(providers).some((provider) => provider?.isTestAdapter === true)) throw new Error('Test providers cannot be selected in production.');
-  if (config.production && sessionStore instanceof PreproductionMemorySessionStore) throw new Error('Preproduction session storage cannot be selected in production.');
+  if (config.production && !sessionStore?.isDurablePostgresStore) throw new Error('Production requires a PostgreSQL-backed session store.');
   if (config.production && attemptStore instanceof PreproductionAuthAttemptStore) throw new Error('Preproduction auth-attempt storage cannot be selected in production.');
   const actualSessionStore = sessionStore || (config.production ? new ProductionSessionStoreUnavailable() : new PreproductionMemorySessionStore({ clock }));
   const actualAttemptStore = attemptStore || new PreproductionAuthAttemptStore({ clock, enabled: !config.production || config.sessionStoreKind === 'postgresql' });
@@ -45,6 +45,9 @@ export function createPreproductionEdge({ config: rawConfig, providers, authorit
   const rateLimiter = limiter || new SlidingRateLimiter({ clock, policy: config.rateLimit });
   return { config, providers, authority, sessions, attempts: actualAttemptStore, audit, clock, rateLimiter, handler: createHandler({ config, providers, authority, sessions, attempts: actualAttemptStore, audit, clock, rateLimiter }) };
 }
+
+// Compatibility name retained for 1B tests and explicitly preproduction callers.
+export const createPreproductionEdge = createTenantEdge;
 
 export function createHttpServer(edge) { return createServer(edge.handler); }
 
