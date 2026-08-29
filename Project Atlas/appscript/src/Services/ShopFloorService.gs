@@ -50,7 +50,8 @@ ShopFloorService_.prototype.getTravelerData = function (token) {
   var record = this.activeQr_(token);
   var job = this.jobs.get(record.jobId), shopJob = this.toShopJob_(job, record);
   return serializeVmosValue_({
-    id: shopJob.id, jobId: shopJob.id, customerName: shopJob.customerName,
+    id: shopJob.id, jobId: shopJob.id, customerName: shopJob.customerName, workClassification: shopJob.workClassification,
+    classificationLabel: shopJob.classificationLabel, internalWorkType: shopJob.internalWorkType, assetId: shopJob.assetId,
     partId: shopJob.partId, revision: shopJob.revision, dueDate: shopJob.dueDate,
     status: shopJob.status, quantity: shopJob.quantity, machine: shopJob.machine,
     program: shopJob.program, nextAction: shopJob.nextAction,
@@ -100,10 +101,12 @@ ShopFloorService_.prototype.rotateQr = function (jobId, reason) {
 
 ShopFloorService_.prototype.toShopJob_ = function (job, qr) {
   var customer = job.customerId ? new MvpService_('Customer').get(job.customerId) : {};
+  var classification=typeof atlasJobClassification_==='function'?atlasJobClassification_(job):(String(job.workClassification||'').toUpperCase()||(job.customerId||job.quoteId?'CUSTOMER':''));
+  var display=typeof atlasJobDisplay_==='function'?atlasJobDisplay_(job):{classification:classification,label:classification==='INTERNAL'?'INTERNAL · '+String(job.internalWorkType||'').replace(/_/g,' '):'CUSTOMER',internalWorkType:String(job.internalWorkType||'').toUpperCase()};
   var workflow = getShopWorkflow_(qr.workflowId);
   var transitions = String(job.status || '').toUpperCase() === 'BLOCKED' ? [] : getWorkflowTransitions_(qr.workflowId, job.status);
   return serializeVmosValue_({
-    id: job.id, customerId: job.customerId, customerName: customer.name, partId: job.partId, revision: job.revision,
+    id: job.id, customerId: job.customerId, customerName: display.classification==='INTERNAL'?display.label:customer.name, workClassification:display.classification, classificationLabel:display.label, internalWorkType:display.internalWorkType, assetId:job.assetId||'', title:job.title||'', description:job.description||'', partId: job.partId, revision: job.revision,
     dueDate: job.dueDate, status: job.status, operator: job.operator, machine: job.machine, program: job.program,
     quantity: job.quantity, workflowId: qr.workflowId, workflowLabel: workflow.label, workflowStates: workflow.states, allowedTransitions: transitions,
     nextAction: transitions.length ? transitions[0].replace(/_/g, ' ') : '', blocked: String(job.status || '').toUpperCase() === 'BLOCKED'

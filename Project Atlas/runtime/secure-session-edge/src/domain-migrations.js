@@ -466,6 +466,51 @@ CREATE TABLE atlas_firearm_regulatory_events (
 CREATE INDEX atlas_firearm_events_recent_idx ON atlas_firearm_regulatory_events (tenant_id, firearm_id, occurred_at DESC, firearm_event_id DESC);
 `;
 
+const internalJobsAssetsSql = `
+CREATE TABLE atlas_assets (
+  tenant_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  asset_code TEXT NOT NULL CHECK (asset_code <> ''),
+  asset_name TEXT NOT NULL CHECK (asset_name <> ''),
+  description TEXT,
+  category TEXT NOT NULL CHECK (category <> ''),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+  archived_at TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, asset_id),
+  UNIQUE (tenant_id, asset_code),
+  CONSTRAINT atlas_assets_canonical_id CHECK (asset_id LIKE 'ASSET-________-____-____-____-____________'),
+  CONSTRAINT atlas_assets_archive_state CHECK ((status = 'ARCHIVED' AND archived_at IS NOT NULL) OR (status = 'ACTIVE' AND archived_at IS NULL)),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id)
+);
+CREATE INDEX atlas_assets_active_code_idx ON atlas_assets (tenant_id, status, asset_code, asset_id);
+CREATE INDEX atlas_assets_active_name_idx ON atlas_assets (tenant_id, status, asset_name, asset_id);
+CREATE INDEX atlas_assets_category_idx ON atlas_assets (tenant_id, category, status, asset_id);
+
+ALTER TABLE atlas_jobs ADD COLUMN work_classification TEXT NOT NULL DEFAULT 'CUSTOMER';
+ALTER TABLE atlas_jobs ADD COLUMN internal_work_type TEXT;
+ALTER TABLE atlas_jobs ADD COLUMN title TEXT;
+ALTER TABLE atlas_jobs ADD COLUMN description TEXT;
+ALTER TABLE atlas_jobs ADD COLUMN asset_id TEXT;
+ALTER TABLE atlas_jobs ADD COLUMN priority TEXT;
+ALTER TABLE atlas_jobs ADD COLUMN planned_start_at TIMESTAMPTZ;
+ALTER TABLE atlas_jobs ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE atlas_jobs ADD CONSTRAINT atlas_jobs_work_classification_check CHECK (work_classification IN ('CUSTOMER', 'INTERNAL'));
+ALTER TABLE atlas_jobs ADD CONSTRAINT atlas_jobs_classification_authority_check CHECK (
+  (work_classification = 'CUSTOMER' AND customer_id IS NOT NULL AND internal_work_type IS NULL AND asset_id IS NULL)
+  OR
+  (work_classification = 'INTERNAL' AND customer_id IS NULL AND quote_id IS NULL AND accepted_quote_revision_id IS NULL
+    AND internal_work_type IN ('MAINTENANCE', 'REPAIR', 'FIXTURE_TOOLING', 'CAPITAL_IMPROVEMENT', 'R_AND_D_PROTOTYPE', 'FACILITY', 'OTHER')
+    AND COALESCE(title, description, '') <> '')
+);
+ALTER TABLE atlas_jobs ADD CONSTRAINT atlas_jobs_asset_fk FOREIGN KEY (tenant_id, asset_id) REFERENCES atlas_assets (tenant_id, asset_id);
+CREATE INDEX atlas_jobs_classification_status_idx ON atlas_jobs (tenant_id, work_classification, status, due_at, job_id);
+CREATE INDEX atlas_jobs_internal_type_idx ON atlas_jobs (tenant_id, internal_work_type, status, due_at, job_id) WHERE work_classification = 'INTERNAL';
+CREATE INDEX atlas_jobs_asset_status_idx ON atlas_jobs (tenant_id, asset_id, status, job_id) WHERE asset_id IS NOT NULL;
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -474,5 +519,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0002_domain_identity', identitySql),
   migration('0003_domain_crm_commercial', crmCommercialSql),
   migration('0004_domain_operations', operationsSql),
-  migration('0005_domain_supporting_workflows', supportSql)
+  migration('0005_domain_supporting_workflows', supportSql),
+  migration('0006_internal_jobs_and_assets', internalJobsAssetsSql)
 ]);

@@ -26,7 +26,7 @@ test('empty database reaches domain-schema readiness and foundation upgrades for
   const f = await fixture();
   assert.deepEqual(await f.runner.status(), { state: 'CURRENT', ready: true });
   const names = (await f.app.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")).rows.map((row) => row.table_name);
-  for (const required of ['atlas_contacts', 'atlas_rfqs', 'atlas_quote_revisions', 'atlas_jobs', 'atlas_job_events', 'atlas_job_qr_tokens', 'atlas_invoices', 'atlas_cash_receipts', 'atlas_external_identities', 'atlas_security_audit_events']) assert.ok(names.includes(required), required);
+  for (const required of ['atlas_contacts', 'atlas_rfqs', 'atlas_quote_revisions', 'atlas_jobs', 'atlas_assets', 'atlas_job_events', 'atlas_job_qr_tokens', 'atlas_invoices', 'atlas_cash_receipts', 'atlas_external_identities', 'atlas_security_audit_events']) assert.ok(names.includes(required), required);
   assert.ok(!names.includes('atlas_travelers'));
   assert.deepEqual(await new RuntimeReadiness({ runtime: f.app, migrations: f.runner, sessionStore: {} }).readiness(), { status: 'READY' });
   await close(f);
@@ -76,6 +76,30 @@ test('Job, append-only event and revocable QR token persist the Traveler project
   await f.app.query('INSERT INTO atlas_job_events (tenant_id, job_event_id, job_id, job_operation_id, event_type) VALUES ($1,$2,$3,$4,$5)', [t, 'JOB-EVENT-A', 'JOB-A', 'JOB-OP-A', 'OPERATION_STARTED']);
   await f.app.query('INSERT INTO atlas_job_qr_tokens (tenant_id, job_qr_token_id, job_id, token_hash, status) VALUES ($1,$2,$3,$4,$5)', [t, 'JOB-QR-A', 'JOB-A', 'opaque-token-hash', 'ACTIVE']);
   await reject(f.app.query('INSERT INTO atlas_job_events (tenant_id, job_event_id, job_id, event_type) VALUES ($1,$2,$3,$4)', ['TENANT-B', 'JOB-EVENT-B', 'JOB-A', 'FORGED']));
+  assert.equal((await f.app.query("SELECT COUNT(*)::int AS count FROM information_schema.tables WHERE table_name = 'atlas_travelers'")).rows[0].count, 0);
+  await close(f);
+});
+
+test('Customer and Internal Jobs share one tenant-safe Job aggregate while Assets remain optional tenant-owned references', async () => {
+  const f = await fixture(); const a = 'TENANT-A'; const b = 'TENANT-B';
+  await seedTenant(f.app, a); await seedTenant(f.app, b); await seedCustomer(f.app, a, 'CUSTOMER-A');
+  const mill = 'ASSET-11111111-1111-4111-8111-111111111111';
+  const lathe = 'ASSET-22222222-2222-4222-8222-222222222222';
+  await f.app.query('INSERT INTO atlas_assets (tenant_id, asset_id, asset_code, asset_name, category) VALUES ($1,$2,$3,$4,$5)', [a, mill, 'MILL-04', 'Haas VF-4', 'MACHINE']);
+  await f.app.query('INSERT INTO atlas_assets (tenant_id, asset_id, asset_code, asset_name, category) VALUES ($1,$2,$3,$4,$5)', [b, lathe, 'MILL-04', 'Tenant B Mill', 'MACHINE']);
+  await reject(f.app.query('INSERT INTO atlas_assets (tenant_id, asset_id, asset_code, asset_name, category) VALUES ($1,$2,$3,$4,$5)', [a, 'ASSET-33333333-3333-4333-8333-333333333333', 'MILL-04', 'Duplicate code', 'MACHINE']));
+  await reject(f.app.query('INSERT INTO atlas_assets (tenant_id, asset_id, asset_code, asset_name, category) VALUES ($1,$2,$3,$4,$5)', [a, 'not-an-asset', 'BAD-01', 'Bad ID', 'MACHINE']));
+  await f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, internal_work_type, title, asset_id, status) VALUES ($1,$2,'INTERNAL','REPAIR',$3,$4,'PLANNED')", [a, 'JOB-INTERNAL', 'Repair spindle coolant leak', mill]);
+  await f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, internal_work_type, description, status) VALUES ($1,$2,'INTERNAL','FACILITY',$3,'PLANNED')", [a, 'JOB-INTERNAL-NO-ASSET', 'Reorganize material storage']);
+  await f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, customer_id, status) VALUES ($1,$2,'CUSTOMER',$3,'PLANNED')", [a, 'JOB-CUSTOMER-DIRECT', 'CUSTOMER-A']);
+  await reject(f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, internal_work_type, title, asset_id) VALUES ($1,$2,'INTERNAL','REPAIR',$3,$4)", [a, 'JOB-CROSS-TENANT-ASSET', 'Forged asset', lathe]));
+  await reject(f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, title) VALUES ($1,$2,'INTERNAL',$3)", [a, 'JOB-NO-TYPE', 'Missing type']));
+  await reject(f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, internal_work_type, title, customer_id) VALUES ($1,$2,'INTERNAL','REPAIR',$3,$4)", [a, 'JOB-FAKE-CUSTOMER', 'Invalid authority', 'CUSTOMER-A']));
+  await reject(f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, status) VALUES ($1,$2,'CUSTOMER','PLANNED')", [a, 'JOB-CUSTOMER-NO-CUSTOMER']));
+  await reject(f.app.query("INSERT INTO atlas_jobs (tenant_id, job_id, work_classification, customer_id, internal_work_type) VALUES ($1,$2,'CUSTOMER',$3,'REPAIR')", [a, 'JOB-CUSTOMER-INTERNAL-TYPE', 'CUSTOMER-A']));
+  await f.app.query("UPDATE atlas_assets SET status='ARCHIVED', archived_at=NOW(), version=version+1 WHERE tenant_id=$1 AND asset_id=$2", [a, mill]);
+  assert.equal((await f.app.query('SELECT status FROM atlas_assets WHERE tenant_id=$1 AND asset_id=$2', [a, mill])).rows[0].status, 'ARCHIVED');
+  assert.equal((await f.app.query('SELECT work_classification FROM atlas_jobs WHERE tenant_id=$1 AND job_id=$2', [a, 'JOB-INTERNAL'])).rows[0].work_classification, 'INTERNAL');
   assert.equal((await f.app.query("SELECT COUNT(*)::int AS count FROM information_schema.tables WHERE table_name = 'atlas_travelers'")).rows[0].count, 0);
   await close(f);
 });
