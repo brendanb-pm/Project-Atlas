@@ -42,6 +42,27 @@ export class PostgresRuntime {
       } finally { client?.release(); }
     }
   }
+  async acquireAdvisoryLock(key) {
+    if (this.config.role !== 'MIGRATION' || !/^[a-z0-9-]{1,80}$/.test(String(key || ''))) throw errors.forbidden();
+    let client; const started = performance.now();
+    try {
+      client = await this.pool.connect();
+      await client.query({ text: 'SELECT pg_advisory_lock(hashtext($1))', values: [key], query_timeout: this.config.pool.statementTimeoutMs });
+      this.log({ operation: 'MIGRATION_LOCK', outcome: 'SUCCESS', durationMs: Math.round(performance.now() - started) });
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        try { await client.query({ text: 'SELECT pg_advisory_unlock(hashtext($1)) AS unlocked', values: [key], query_timeout: this.config.pool.statementTimeoutMs }); }
+        catch (error) { throw mapPgError(error); }
+        finally { client.release(); }
+      };
+    } catch (error) {
+      client?.release();
+      this.log({ operation: 'MIGRATION_LOCK', outcome: classifyPgError(error), durationMs: Math.round(performance.now() - started) });
+      throw mapPgError(error);
+    }
+  }
   async close() { await this.pool.end(); }
   async liveness() { return { live: true }; }
   async rollbackSmoke(operation = 'TRANSACTION_ROLLBACK_SMOKE') {

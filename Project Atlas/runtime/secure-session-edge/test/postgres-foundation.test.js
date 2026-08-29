@@ -64,6 +64,12 @@ test('transaction boundary uses one acquired client and always rolls back before
   const runtime = new PostgresRuntime(config, { pool: { connect: async () => client, end: async () => {} } }); await assert.rejects(() => runtime.withTransaction('TEST', async () => { throw new Error('stop'); })); assert.deepEqual(calls, ['BEGIN ISOLATION LEVEL READ COMMITTED', 'ROLLBACK', 'RELEASE']);
 });
 
+test('migration advisory lock remains pinned to one acquired PostgreSQL session', async () => {
+  const calls = []; const client = { query: async (query) => { calls.push({ text: query.text, values: query.values }); return { rows: [{ unlocked: true }] }; }, release: () => calls.push({ text: 'RELEASE' }) };
+  const config = { role: 'MIGRATION', host: 'h', port: 5432, database: 'd', user: 'u', password: 'p', tls: { required: false }, pool: { max: 2, idleTimeoutMs: 1000, connectionTimeoutMs: 1000, statementTimeoutMs: 1000 } };
+  const runtime = new PostgresRuntime(config, { pool: { connect: async () => client, end: async () => {} } }); const release = await runtime.acquireAdvisoryLock('atlas-schema-migrations'); await release(); await release(); assert.deepEqual(calls.map((call) => call.text), ['SELECT pg_advisory_lock(hashtext($1))', 'SELECT pg_advisory_unlock(hashtext($1)) AS unlocked', 'RELEASE']); assert(calls.slice(0, 2).every((call) => call.values[0] === 'atlas-schema-migrations'));
+});
+
 test('injection-shaped data remains bound values and malformed cursors are rejected before execution', async () => {
   const f = await fixture(); const p = f.provider; await p.createForScope(scopeA, { id: 'safe-record', name: "x'; DROP TABLE atlas_auth_sessions;--", commandId: 'cmd-safe', requestFingerprint: 'fp-safe' }); assert.equal((await p.getForScope(scopeA, 'safe-record')).name, "x'; DROP TABLE atlas_auth_sessions;--"); await reject(p.listForScope(scopeA, { limit: 1, cursor: 'not-a-cursor' }), 'INVALID_REQUEST'); await reject(p.getForScope(scopeA, "x' OR '1'='1"), 'INVALID_REQUEST'); await f.app.close(); await f.migration.close();
 });

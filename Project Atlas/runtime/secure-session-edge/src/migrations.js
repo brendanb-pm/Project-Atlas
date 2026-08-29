@@ -97,8 +97,8 @@ export class PostgresMigrationRunner {
   }
   async acquireLock() {
     if (this.lock) return this.lock.acquire();
-    await this.runtime.query("SELECT pg_advisory_lock(hashtext('atlas-schema-migrations'))", [], 'MIGRATION_LOCK');
-    return async () => { await this.runtime.query("SELECT pg_advisory_unlock(hashtext('atlas-schema-migrations'))", [], 'MIGRATION_UNLOCK'); };
+    if (!this.runtime.acquireAdvisoryLock) throw errors.persistenceUnavailable();
+    return this.runtime.acquireAdvisoryLock('atlas-schema-migrations');
   }
 }
 
