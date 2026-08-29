@@ -4,9 +4,32 @@ These rules apply repository-wide unless a more-specific descendant `AGENTS.md` 
 
 ## Canonical standards
 
-Load `brendanb-pm/Codex-Standards/Codex-Standards.md` plus only the conditional modules triggered by the task. Do not load all modules by default and do not duplicate canonical standards in prompts or this file.
+Canonical standards are maintained only in:
 
-Use the core deterministic model/priority policy. Select once before execution; do not continue discussing model choice during the run.
+`https://github.com/brendanb-pm/Codex-Standards`
+
+Use one shared local read-only checkout for all projects.
+
+Resolve the checkout path in this order:
+
+1. `CODEX_STANDARDS_HOME`, when set.
+2. Otherwise `$HOME/.codex/Codex-Standards`.
+
+At the first substantive task of a session, refresh that checkout once:
+
+- if missing, clone `https://github.com/brendanb-pm/Codex-Standards`;
+- if present and clean, update it with a fast-forward-only pull from `main`;
+- do not refresh again for every task in the same session;
+- agents must never edit, commit, push, reset, or otherwise mutate the canonical standards repository except for the refresh operation above.
+
+If the checkout is dirty, conflicted, or cannot be safely refreshed, do not reset or discard anything automatically. Report the condition. A previously cached clean checkout may be used only when `Codex-Standards.md` is present; report `STANDARDS SOURCE: CACHED; FRESHNESS: UNVERIFIED`. If no usable checkout exists, stop substantive execution and report `CANONICAL STANDARDS UNAVAILABLE`.
+
+Load only:
+
+- `<standards-home>/Codex-Standards.md`; and
+- conditional modules triggered by the task.
+
+Do not copy canonical standards into this repository. Do not load every module by default. Use the core deterministic model/priority policy: select once before execution and do not continue discussing model choice during the run.
 
 ## Release channel
 
