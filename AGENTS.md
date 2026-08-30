@@ -87,3 +87,28 @@ When a brief explicitly uses this integrity mechanism and the marker is missing,
 Keep completion reports concise. Include as applicable: release channel, changed files, tests/results, schema/config changes, known defects/deferred scope, production changes, commit/push state, loaded modules, and the core `EFF` line for substantive story work.
 
 Never describe functionality as deployed, activated, visually validated, live-provider verified, or production-ready unless that actually occurred.
+
+## Temporary model-efficiency experiment
+
+The six-story Atlas model-efficiency experiment is active until slots A1–A6 are
+closed in `Project Atlas/docs/Experiments/Atlas-Model-Efficiency-Experiment.md`.
+This is a temporary project experiment, not a permanent change to the canonical
+selector. The experiment setup itself does not consume a slot.
+
+Before substantive work on a candidate Atlas story, read the tracker and use
+the first open slot only when the story naturally matches that slot. Do not
+invent, shrink, reorder, or weaken work to fill a slot. Direct-to-Sol security,
+tenant-isolation, financial-integrity, destructive-migration, durable-recovery,
+systemic-reconciliation, and broadly ambiguous architecture triggers do not
+consume Terra slots.
+
+For an experimental story, stop before launching implementation and emit the
+tracker's exact `INSTRUMENTATION START` request. Wait for the user's compute
+percentages, record them, then keep the selected model/effort stable for that
+run. After execution finishes, stop before any other story and emit the exact
+`INSTRUMENTATION CHECKPOINT` request with the execution evidence. Wait for the
+user's ending percentages before closing the slot. Preserve failures and
+escalations as evidence; never silently hide them by switching models.
+
+After A6, produce the required comparison and recommendation. Do not change the
+canonical model selector unless the user separately approves that conclusion.
