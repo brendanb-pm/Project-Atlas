@@ -511,6 +511,270 @@ CREATE INDEX atlas_jobs_internal_type_idx ON atlas_jobs (tenant_id, internal_wor
 CREATE INDEX atlas_jobs_asset_status_idx ON atlas_jobs (tenant_id, asset_id, status, job_id) WHERE asset_id IS NOT NULL;
 `;
 
+const physicalToolingSql = `
+CREATE TABLE atlas_tool_types (
+  tenant_id TEXT NOT NULL,
+  tool_type_id TEXT NOT NULL,
+  manufacturer TEXT,
+  catalog_number TEXT,
+  description TEXT NOT NULL CHECK (description <> ''),
+  tool_class TEXT NOT NULL CHECK (tool_class <> ''),
+  nominal_diameter NUMERIC(18,6),
+  nominal_cutting_length NUMERIC(18,6),
+  nominal_overall_length NUMERIC(18,6),
+  flute_count INTEGER CHECK (flute_count IS NULL OR flute_count > 0),
+  tool_material TEXT,
+  coating TEXT,
+  unit_system TEXT NOT NULL CHECK (unit_system IN ('INCH','MILLIMETER')),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','ARCHIVED')),
+  archived_at TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by_user_id TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, tool_type_id),
+  UNIQUE (tenant_id, manufacturer, catalog_number),
+  CONSTRAINT atlas_tool_types_archive_state CHECK ((status='ARCHIVED' AND archived_at IS NOT NULL) OR (status='ACTIVE' AND archived_at IS NULL)),
+  CONSTRAINT atlas_tool_types_canonical_id CHECK (tool_type_id LIKE 'TOOL-TYPE-________-____-____-____-____________'),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id),
+  FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id)
+);
+CREATE INDEX atlas_tool_types_lookup_idx ON atlas_tool_types (tenant_id, status, tool_class, nominal_diameter, tool_type_id);
+
+CREATE TABLE atlas_tool_instances (
+  tenant_id TEXT NOT NULL,
+  tool_instance_id TEXT NOT NULL,
+  tool_type_id TEXT NOT NULL,
+  serial_lot_identifier TEXT,
+  condition TEXT NOT NULL CHECK (condition IN ('NEW','USED','REGROUND','MODIFIED','DAMAGED','QUARANTINED','RETIRED')),
+  verification_status TEXT NOT NULL DEFAULT 'UNVERIFIED' CHECK (verification_status IN ('UNVERIFIED','VERIFIED','STALE')),
+  current_measurement_id TEXT,
+  storage_location TEXT,
+  notes TEXT,
+  attachment_references_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','ARCHIVED')),
+  archived_at TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by_user_id TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, tool_instance_id),
+  UNIQUE (tenant_id, tool_instance_id, tool_type_id),
+  FOREIGN KEY (tenant_id, tool_type_id) REFERENCES atlas_tool_types (tenant_id, tool_type_id),
+  CONSTRAINT atlas_tool_instances_archive_state CHECK ((status='ARCHIVED' AND archived_at IS NOT NULL) OR (status='ACTIVE' AND archived_at IS NULL)),
+  CONSTRAINT atlas_tool_instances_canonical_id CHECK (tool_instance_id LIKE 'TOOL-________-____-____-____-____________'),
+  FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id)
+);
+CREATE INDEX atlas_tool_instances_lookup_idx ON atlas_tool_instances (tenant_id, status, condition, tool_type_id, tool_instance_id);
+CREATE INDEX atlas_tool_instances_verification_idx ON atlas_tool_instances (tenant_id, verification_status, condition, tool_instance_id) WHERE status='ACTIVE';
+
+CREATE TABLE atlas_tool_measurements (
+  tenant_id TEXT NOT NULL,
+  tool_measurement_id TEXT NOT NULL,
+  tool_instance_id TEXT NOT NULL,
+  measured_diameter NUMERIC(18,6),
+  measured_length NUMERIC(18,6),
+  unit_system TEXT NOT NULL CHECK (unit_system IN ('INCH','MILLIMETER')),
+  measured_at TIMESTAMPTZ NOT NULL,
+  measured_by_user_id TEXT NOT NULL,
+  measurement_method TEXT,
+  source_reference TEXT,
+  verification_status TEXT NOT NULL CHECK (verification_status IN ('RECORDED','VERIFIED','REJECTED')),
+  verified_at TIMESTAMPTZ,
+  verified_by_user_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, tool_measurement_id),
+  UNIQUE (tenant_id, tool_instance_id, tool_measurement_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (measured_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (verified_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_tool_measurements_verified_state CHECK ((verification_status='VERIFIED' AND verified_at IS NOT NULL AND verified_by_user_id IS NOT NULL) OR verification_status<>'VERIFIED')
+  ,CONSTRAINT atlas_tool_measurements_canonical_id CHECK (tool_measurement_id LIKE 'TOOL-MEAS-________-____-____-____-____________')
+);
+CREATE INDEX atlas_tool_measurements_history_idx ON atlas_tool_measurements (tenant_id, tool_instance_id, measured_at DESC, tool_measurement_id DESC);
+ALTER TABLE atlas_tool_instances ADD CONSTRAINT atlas_tool_instances_current_measurement_fk FOREIGN KEY (tenant_id, tool_instance_id, current_measurement_id) REFERENCES atlas_tool_measurements (tenant_id, tool_instance_id, tool_measurement_id);
+
+CREATE TABLE atlas_tool_condition_events (
+  tenant_id TEXT NOT NULL,
+  tool_condition_event_id TEXT NOT NULL,
+  tool_instance_id TEXT NOT NULL,
+  previous_condition TEXT NOT NULL CHECK (previous_condition IN ('NEW','USED','REGROUND','MODIFIED','DAMAGED','QUARANTINED','RETIRED')),
+  next_condition TEXT NOT NULL CHECK (next_condition IN ('NEW','USED','REGROUND','MODIFIED','DAMAGED','QUARANTINED','RETIRED')),
+  reason TEXT NOT NULL CHECK (reason <> ''),
+  changed_at TIMESTAMPTZ NOT NULL,
+  changed_by_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, tool_condition_event_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (changed_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_tool_condition_events_canonical_id CHECK (tool_condition_event_id LIKE 'TOOL-COND-________-____-____-____-____________'),
+  CONSTRAINT atlas_tool_condition_events_changed CHECK (previous_condition <> next_condition)
+);
+CREATE INDEX atlas_tool_condition_events_history_idx ON atlas_tool_condition_events (tenant_id, tool_instance_id, changed_at DESC, tool_condition_event_id DESC);
+
+CREATE TABLE atlas_holders (
+  tenant_id TEXT NOT NULL,
+  holder_id TEXT NOT NULL,
+  description TEXT NOT NULL CHECK (description <> ''),
+  holder_type TEXT NOT NULL CHECK (holder_type <> ''),
+  manufacturer TEXT,
+  model TEXT,
+  machine_interface TEXT,
+  physical_identifier_reference TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','QUARANTINED','RETIRED','ARCHIVED')),
+  storage_location TEXT,
+  archived_at TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by_user_id TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, holder_id),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id),
+  FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_holders_canonical_id CHECK (holder_id LIKE 'HOLDER-________-____-____-____-____________')
+);
+CREATE INDEX atlas_holders_lookup_idx ON atlas_holders (tenant_id, status, holder_type, holder_id);
+
+CREATE TABLE atlas_tool_assemblies (
+  tenant_id TEXT NOT NULL,
+  tool_assembly_id TEXT NOT NULL,
+  holder_id TEXT NOT NULL,
+  tool_instance_id TEXT NOT NULL,
+  installed_by_user_id TEXT NOT NULL,
+  installed_at TIMESTAMPTZ NOT NULL,
+  verification_status TEXT NOT NULL CHECK (verification_status IN ('UNVERIFIED','VERIFIED','STALE','BLOCKED')),
+  verified_measurement_id TEXT,
+  actual_diameter_snapshot NUMERIC(18,6),
+  unit_system TEXT,
+  last_verified_at TIMESTAMPTZ,
+  removed_at TIMESTAMPTZ,
+  removed_by_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REMOVED')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, tool_assembly_id),
+  UNIQUE (tenant_id, tool_assembly_id, holder_id, tool_instance_id),
+  FOREIGN KEY (tenant_id, holder_id) REFERENCES atlas_holders (tenant_id, holder_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (tenant_id, tool_instance_id, verified_measurement_id) REFERENCES atlas_tool_measurements (tenant_id, tool_instance_id, tool_measurement_id),
+  FOREIGN KEY (installed_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (removed_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_tool_assemblies_lifecycle CHECK ((status='ACTIVE' AND removed_at IS NULL) OR (status='REMOVED' AND removed_at IS NOT NULL))
+  ,CONSTRAINT atlas_tool_assemblies_canonical_id CHECK (tool_assembly_id LIKE 'TOOL-ASM-________-____-____-____-____________')
+);
+CREATE UNIQUE INDEX atlas_tool_assemblies_active_holder_idx ON atlas_tool_assemblies (tenant_id, holder_id) WHERE status='ACTIVE';
+CREATE UNIQUE INDEX atlas_tool_assemblies_active_tool_idx ON atlas_tool_assemblies (tenant_id, tool_instance_id) WHERE status='ACTIVE';
+
+CREATE TABLE atlas_tool_machine_assignments (
+  tenant_id TEXT NOT NULL,
+  tool_assignment_id TEXT NOT NULL,
+  tool_assembly_id TEXT NOT NULL,
+  machine_asset_id TEXT NOT NULL,
+  pocket_reference TEXT,
+  loaded_at TIMESTAMPTZ NOT NULL,
+  loaded_by_user_id TEXT NOT NULL,
+  verification_status TEXT NOT NULL CHECK (verification_status IN ('UNVERIFIED','VERIFIED','STALE')),
+  unloaded_at TIMESTAMPTZ,
+  unloaded_by_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REMOVED')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, tool_assignment_id),
+  FOREIGN KEY (tenant_id, tool_assembly_id) REFERENCES atlas_tool_assemblies (tenant_id, tool_assembly_id),
+  FOREIGN KEY (tenant_id, machine_asset_id) REFERENCES atlas_assets (tenant_id, asset_id),
+  FOREIGN KEY (loaded_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (unloaded_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_tool_assignments_canonical_id CHECK (tool_assignment_id LIKE 'TOOL-ASGN-________-____-____-____-____________'),
+  CONSTRAINT atlas_tool_assignments_lifecycle CHECK ((status='ACTIVE' AND unloaded_at IS NULL) OR (status='REMOVED' AND unloaded_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX atlas_tool_assignments_active_assembly_idx ON atlas_tool_machine_assignments (tenant_id, tool_assembly_id) WHERE status='ACTIVE';
+CREATE UNIQUE INDEX atlas_tool_assignments_active_pocket_idx ON atlas_tool_machine_assignments (tenant_id, machine_asset_id, pocket_reference) WHERE status='ACTIVE' AND pocket_reference IS NOT NULL;
+CREATE INDEX atlas_tool_assignments_machine_idx ON atlas_tool_machine_assignments (tenant_id, machine_asset_id, status, pocket_reference, tool_assignment_id);
+
+CREATE TABLE atlas_operation_tool_requirements (
+  tenant_id TEXT NOT NULL,
+  tool_requirement_id TEXT NOT NULL,
+  job_operation_id TEXT NOT NULL,
+  tool_type_id TEXT NOT NULL,
+  required_holder_id TEXT,
+  cam_tool_reference TEXT,
+  setup_tool_number TEXT,
+  expected_diameter NUMERIC(18,6),
+  unit_system TEXT NOT NULL CHECK (unit_system IN ('INCH','MILLIMETER')),
+  radial_stock_to_leave NUMERIC(18,6),
+  verified_actual_geometry_required BOOLEAN NOT NULL DEFAULT FALSE,
+  policy_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','ARCHIVED')),
+  archived_at TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, tool_requirement_id),
+  UNIQUE (tenant_id, job_operation_id, tool_requirement_id),
+  FOREIGN KEY (tenant_id, job_operation_id) REFERENCES atlas_job_operations (tenant_id, job_operation_id),
+  FOREIGN KEY (tenant_id, tool_type_id) REFERENCES atlas_tool_types (tenant_id, tool_type_id),
+  FOREIGN KEY (tenant_id, required_holder_id) REFERENCES atlas_holders (tenant_id, holder_id)
+  ,CONSTRAINT atlas_tool_requirements_canonical_id CHECK (tool_requirement_id LIKE 'TOOL-REQ-________-____-____-____-____________')
+);
+CREATE INDEX atlas_tool_requirements_operation_idx ON atlas_operation_tool_requirements (tenant_id, job_operation_id, status, tool_requirement_id);
+
+CREATE TABLE atlas_operation_tool_executions (
+  tenant_id TEXT NOT NULL,
+  tool_execution_id TEXT NOT NULL,
+  job_operation_id TEXT NOT NULL,
+  tool_requirement_id TEXT NOT NULL,
+  tool_instance_id TEXT NOT NULL,
+  tool_assembly_id TEXT NOT NULL,
+  holder_id TEXT NOT NULL,
+  machine_asset_id TEXT,
+  pocket_reference TEXT,
+  verified_measurement_id TEXT,
+  actual_diameter_snapshot NUMERIC(18,6),
+  nominal_diameter_snapshot NUMERIC(18,6),
+  unit_system TEXT NOT NULL CHECK (unit_system IN ('INCH','MILLIMETER')),
+  tool_condition_snapshot TEXT NOT NULL,
+  preflight_state TEXT NOT NULL CHECK (preflight_state IN ('READY','WARNING')),
+  preflight_details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  executed_at TIMESTAMPTZ NOT NULL,
+  operator_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, tool_execution_id),
+  FOREIGN KEY (tenant_id, job_operation_id) REFERENCES atlas_job_operations (tenant_id, job_operation_id),
+  FOREIGN KEY (tenant_id, job_operation_id, tool_requirement_id) REFERENCES atlas_operation_tool_requirements (tenant_id, job_operation_id, tool_requirement_id),
+  FOREIGN KEY (tenant_id, tool_assembly_id, holder_id, tool_instance_id) REFERENCES atlas_tool_assemblies (tenant_id, tool_assembly_id, holder_id, tool_instance_id),
+  FOREIGN KEY (tenant_id, machine_asset_id) REFERENCES atlas_assets (tenant_id, asset_id),
+  FOREIGN KEY (tenant_id, tool_instance_id, verified_measurement_id) REFERENCES atlas_tool_measurements (tenant_id, tool_instance_id, tool_measurement_id),
+  FOREIGN KEY (operator_user_id) REFERENCES atlas_users (user_id)
+  ,CONSTRAINT atlas_tool_executions_canonical_id CHECK (tool_execution_id LIKE 'TOOL-EXEC-________-____-____-____-____________')
+);
+CREATE INDEX atlas_tool_executions_operation_idx ON atlas_operation_tool_executions (tenant_id, job_operation_id, executed_at DESC, tool_execution_id DESC);
+CREATE INDEX atlas_tool_executions_tool_idx ON atlas_operation_tool_executions (tenant_id, tool_instance_id, executed_at DESC, tool_execution_id DESC);
+
+CREATE TABLE atlas_tool_identifiers (
+  tenant_id TEXT NOT NULL,
+  tool_identifier_id TEXT NOT NULL,
+  resource_type TEXT NOT NULL CHECK (resource_type IN ('TOOL_INSTANCE','HOLDER')),
+  tool_instance_id TEXT,
+  holder_id TEXT,
+  token_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REVOKED')),
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_at TIMESTAMPTZ,
+  PRIMARY KEY (tenant_id, tool_identifier_id),
+  UNIQUE (tenant_id, token_hash),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (tenant_id, holder_id) REFERENCES atlas_holders (tenant_id, holder_id),
+  CONSTRAINT atlas_tool_identifiers_resource CHECK ((resource_type='TOOL_INSTANCE' AND tool_instance_id IS NOT NULL AND holder_id IS NULL) OR (resource_type='HOLDER' AND holder_id IS NOT NULL AND tool_instance_id IS NULL))
+  ,CONSTRAINT atlas_tool_identifiers_canonical_id CHECK (tool_identifier_id LIKE 'TOOL-ID-________-____-____-____-____________'),
+  CONSTRAINT atlas_tool_identifiers_token_hash CHECK (token_hash LIKE '________________________________________________________________'),
+  CONSTRAINT atlas_tool_identifiers_lifecycle CHECK ((status='ACTIVE' AND revoked_at IS NULL) OR (status='REVOKED' AND revoked_at IS NOT NULL))
+);
+CREATE INDEX atlas_tool_identifiers_resource_idx ON atlas_tool_identifiers (tenant_id, resource_type, status, tool_instance_id, holder_id);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -520,5 +784,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0003_domain_crm_commercial', crmCommercialSql),
   migration('0004_domain_operations', operationsSql),
   migration('0005_domain_supporting_workflows', supportSql),
-  migration('0006_internal_jobs_and_assets', internalJobsAssetsSql)
+  migration('0006_internal_jobs_and_assets', internalJobsAssetsSql),
+  migration('0007_physical_tooling_traceability', physicalToolingSql)
 ]);
