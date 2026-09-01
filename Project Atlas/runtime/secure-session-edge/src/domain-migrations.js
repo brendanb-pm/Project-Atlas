@@ -775,6 +775,95 @@ CREATE TABLE atlas_tool_identifiers (
 CREATE INDEX atlas_tool_identifiers_resource_idx ON atlas_tool_identifiers (tenant_id, resource_type, status, tool_instance_id, holder_id);
 `;
 
+const wipBinsSql = `
+CREATE TABLE atlas_wip_bins (
+  tenant_id TEXT NOT NULL,
+  wip_bin_id TEXT NOT NULL,
+  bin_label TEXT NOT NULL CHECK (bin_label <> ''),
+  status TEXT NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE','ASSIGNED','QUARANTINED','RETIRED')),
+  current_location TEXT NOT NULL CHECK (current_location <> ''),
+  notes TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_by_user_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  retired_at TIMESTAMPTZ,
+  PRIMARY KEY (tenant_id, wip_bin_id),
+  UNIQUE (tenant_id, bin_label),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id),
+  FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_wip_bins_canonical_id CHECK (wip_bin_id LIKE 'WIP-BIN-________-____-____-____-____________'),
+  CONSTRAINT atlas_wip_bins_retired_state CHECK ((status='RETIRED' AND retired_at IS NOT NULL) OR (status<>'RETIRED' AND retired_at IS NULL))
+);
+CREATE INDEX atlas_wip_bins_location_idx ON atlas_wip_bins (tenant_id, current_location, status, wip_bin_id);
+CREATE INDEX atlas_wip_bins_status_idx ON atlas_wip_bins (tenant_id, status, bin_label, wip_bin_id);
+
+CREATE TABLE atlas_wip_bin_assignments (
+  tenant_id TEXT NOT NULL,
+  wip_bin_assignment_id TEXT NOT NULL,
+  wip_bin_id TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  assigned_at TIMESTAMPTZ NOT NULL,
+  assigned_by_user_id TEXT NOT NULL,
+  released_at TIMESTAMPTZ,
+  released_by_user_id TEXT,
+  release_reason TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','RELEASED')),
+  correlation_id TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  PRIMARY KEY (tenant_id, wip_bin_assignment_id),
+  UNIQUE (tenant_id, wip_bin_id, wip_bin_assignment_id),
+  UNIQUE (tenant_id, job_id, wip_bin_assignment_id),
+  FOREIGN KEY (tenant_id, wip_bin_id) REFERENCES atlas_wip_bins (tenant_id, wip_bin_id),
+  FOREIGN KEY (tenant_id, job_id) REFERENCES atlas_jobs (tenant_id, job_id),
+  FOREIGN KEY (assigned_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (released_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_wip_bin_assignments_canonical_id CHECK (wip_bin_assignment_id LIKE 'WIP-ASGN-________-____-____-____-____________'),
+  CONSTRAINT atlas_wip_bin_assignments_lifecycle CHECK ((status='ACTIVE' AND released_at IS NULL AND released_by_user_id IS NULL) OR (status='RELEASED' AND released_at IS NOT NULL AND released_by_user_id IS NOT NULL))
+);
+CREATE UNIQUE INDEX atlas_wip_bin_assignments_active_bin_idx ON atlas_wip_bin_assignments (tenant_id, wip_bin_id) WHERE status='ACTIVE';
+CREATE UNIQUE INDEX atlas_wip_bin_assignments_active_job_idx ON atlas_wip_bin_assignments (tenant_id, job_id) WHERE status='ACTIVE';
+CREATE INDEX atlas_wip_bin_assignments_job_history_idx ON atlas_wip_bin_assignments (tenant_id, job_id, assigned_at DESC, wip_bin_assignment_id DESC);
+CREATE INDEX atlas_wip_bin_assignments_bin_history_idx ON atlas_wip_bin_assignments (tenant_id, wip_bin_id, assigned_at DESC, wip_bin_assignment_id DESC);
+
+CREATE TABLE atlas_wip_bin_location_events (
+  tenant_id TEXT NOT NULL,
+  wip_bin_location_event_id TEXT NOT NULL,
+  wip_bin_id TEXT NOT NULL,
+  wip_bin_assignment_id TEXT,
+  previous_location TEXT NOT NULL,
+  next_location TEXT NOT NULL,
+  moved_at TIMESTAMPTZ NOT NULL,
+  moved_by_user_id TEXT NOT NULL,
+  reason TEXT,
+  correlation_id TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, wip_bin_location_event_id),
+  FOREIGN KEY (tenant_id, wip_bin_id) REFERENCES atlas_wip_bins (tenant_id, wip_bin_id),
+  FOREIGN KEY (tenant_id, wip_bin_id, wip_bin_assignment_id) REFERENCES atlas_wip_bin_assignments (tenant_id, wip_bin_id, wip_bin_assignment_id),
+  FOREIGN KEY (moved_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_wip_bin_location_events_canonical_id CHECK (wip_bin_location_event_id LIKE 'WIP-LOC-________-____-____-____-____________'),
+  CONSTRAINT atlas_wip_bin_location_events_changed CHECK (previous_location <> next_location)
+);
+CREATE INDEX atlas_wip_bin_location_history_idx ON atlas_wip_bin_location_events (tenant_id, wip_bin_id, moved_at DESC, wip_bin_location_event_id DESC);
+
+CREATE TABLE atlas_wip_bin_identifiers (
+  tenant_id TEXT NOT NULL,
+  wip_bin_identifier_id TEXT NOT NULL,
+  wip_bin_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REVOKED')),
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_at TIMESTAMPTZ,
+  PRIMARY KEY (tenant_id, wip_bin_identifier_id),
+  UNIQUE (tenant_id, token_hash),
+  FOREIGN KEY (tenant_id, wip_bin_id) REFERENCES atlas_wip_bins (tenant_id, wip_bin_id),
+  CONSTRAINT atlas_wip_bin_identifiers_canonical_id CHECK (wip_bin_identifier_id LIKE 'WIP-ID-________-____-____-____-____________'),
+  CONSTRAINT atlas_wip_bin_identifiers_token_hash CHECK (token_hash LIKE '________________________________________________________________'),
+  CONSTRAINT atlas_wip_bin_identifiers_lifecycle CHECK ((status='ACTIVE' AND revoked_at IS NULL) OR (status='REVOKED' AND revoked_at IS NOT NULL))
+);
+CREATE INDEX atlas_wip_bin_identifiers_bin_idx ON atlas_wip_bin_identifiers (tenant_id, wip_bin_id, status, issued_at DESC);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -785,5 +874,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0004_domain_operations', operationsSql),
   migration('0005_domain_supporting_workflows', supportSql),
   migration('0006_internal_jobs_and_assets', internalJobsAssetsSql),
-  migration('0007_physical_tooling_traceability', physicalToolingSql)
+  migration('0007_physical_tooling_traceability', physicalToolingSql),
+  migration('0008_physical_wip_bins', wipBinsSql)
 ]);

@@ -38,7 +38,7 @@ test('ordered migration creates the canonical MOS-138 domain and required indexe
   const f = await fixture();
   const tables = (await f.app.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")).rows.map((x) => x.table_name);
   for (const name of ['atlas_tool_types','atlas_tool_instances','atlas_tool_measurements','atlas_tool_condition_events','atlas_holders','atlas_tool_assemblies','atlas_tool_machine_assignments','atlas_operation_tool_requirements','atlas_operation_tool_executions','atlas_tool_identifiers']) assert.ok(tables.includes(name), name);
-  const migrationSql = DOMAIN_MIGRATIONS.at(-1).sql;
+  const migrationSql = DOMAIN_MIGRATIONS.find((item) => item.id === '0007_physical_tooling_traceability').sql;
   for (const name of ['atlas_tool_instances_lookup_idx','atlas_tool_assemblies_active_holder_idx','atlas_tool_assemblies_active_tool_idx','atlas_tool_assignments_machine_idx','atlas_tool_executions_operation_idx','atlas_tool_identifiers_resource_idx']) assert.match(migrationSql, new RegExp(`CREATE (?:UNIQUE )?INDEX ${name}`), name);
   await f.app.close(); await f.migration.close();
 });
