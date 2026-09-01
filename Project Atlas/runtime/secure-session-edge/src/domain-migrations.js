@@ -864,6 +864,63 @@ CREATE TABLE atlas_wip_bin_identifiers (
 CREATE INDEX atlas_wip_bin_identifiers_bin_idx ON atlas_wip_bin_identifiers (tenant_id, wip_bin_id, status, issued_at DESC);
 `;
 
+const crmActivityFollowUpSql = `
+ALTER TABLE atlas_sales_activities ADD COLUMN direction TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE atlas_sales_activities ADD COLUMN source_channel TEXT NOT NULL DEFAULT 'MANUAL';
+ALTER TABLE atlas_sales_activities ADD COLUMN related_rfq_id TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN related_quote_id TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN related_job_id TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN next_action TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN next_action_due_at TIMESTAMPTZ;
+ALTER TABLE atlas_sales_activities ADD COLUMN disposition TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN created_by_user_id TEXT;
+ALTER TABLE atlas_sales_activities ADD COLUMN completed_at TIMESTAMPTZ;
+ALTER TABLE atlas_sales_activities ADD COLUMN cancelled_at TIMESTAMPTZ;
+ALTER TABLE atlas_sales_activities ADD COLUMN correlation_id TEXT;
+ALTER TABLE atlas_sales_activities ADD CONSTRAINT atlas_sales_activity_rfq_fk FOREIGN KEY (tenant_id, related_rfq_id) REFERENCES atlas_rfqs (tenant_id, rfq_id);
+ALTER TABLE atlas_sales_activities ADD CONSTRAINT atlas_sales_activity_quote_fk FOREIGN KEY (tenant_id, related_quote_id) REFERENCES atlas_quotes (tenant_id, quote_id);
+ALTER TABLE atlas_sales_activities ADD CONSTRAINT atlas_sales_activity_job_fk FOREIGN KEY (tenant_id, related_job_id) REFERENCES atlas_jobs (tenant_id, job_id);
+ALTER TABLE atlas_sales_activities ADD CONSTRAINT atlas_sales_activity_creator_fk FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id);
+CREATE INDEX atlas_sales_activities_contact_timeline_idx ON atlas_sales_activities (tenant_id, contact_id, occurred_at DESC, sales_activity_id DESC) WHERE contact_id IS NOT NULL AND archived_at IS NULL;
+CREATE INDEX atlas_sales_activities_customer_timeline_idx ON atlas_sales_activities (tenant_id, customer_id, occurred_at DESC, sales_activity_id DESC) WHERE customer_id IS NOT NULL AND archived_at IS NULL;
+CREATE INDEX atlas_sales_activities_due_idx ON atlas_sales_activities (tenant_id, owner_user_id, next_action_due_at, sales_activity_id) WHERE status='OPEN' AND next_action_due_at IS NOT NULL AND archived_at IS NULL;
+CREATE INDEX atlas_sales_activities_related_idx ON atlas_sales_activities (tenant_id, related_rfq_id, related_quote_id, related_job_id) WHERE archived_at IS NULL;
+
+ALTER TABLE atlas_follow_ups ADD COLUMN next_action TEXT;
+UPDATE atlas_follow_ups SET next_action=title WHERE next_action IS NULL;
+ALTER TABLE atlas_follow_ups ALTER COLUMN next_action SET NOT NULL;
+ALTER TABLE atlas_follow_ups ADD COLUMN cancellation_reason TEXT;
+ALTER TABLE atlas_follow_ups ADD COLUMN correlation_id TEXT;
+ALTER TABLE atlas_follow_ups ADD COLUMN created_by_user_id TEXT;
+ALTER TABLE atlas_follow_ups ADD CONSTRAINT atlas_follow_up_creator_fk FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id);
+CREATE INDEX atlas_follow_ups_customer_timeline_idx ON atlas_follow_ups (tenant_id, customer_id, due_at DESC, follow_up_id DESC) WHERE archived_at IS NULL;
+CREATE INDEX atlas_follow_ups_contact_timeline_idx ON atlas_follow_ups (tenant_id, contact_id, due_at DESC, follow_up_id DESC) WHERE contact_id IS NOT NULL AND archived_at IS NULL;
+CREATE INDEX atlas_follow_ups_owner_due_idx ON atlas_follow_ups (tenant_id, owner_user_id, due_at, follow_up_id) WHERE status='OPEN' AND archived_at IS NULL;
+
+CREATE TABLE atlas_crm_activity_events (
+  tenant_id TEXT NOT NULL,
+  crm_activity_event_id TEXT NOT NULL,
+  sales_activity_id TEXT,
+  follow_up_id TEXT,
+  event_type TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  previous_version INTEGER,
+  new_version INTEGER NOT NULL,
+  details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (tenant_id, crm_activity_event_id),
+  FOREIGN KEY (tenant_id, sales_activity_id) REFERENCES atlas_sales_activities (tenant_id, sales_activity_id),
+  FOREIGN KEY (tenant_id, follow_up_id) REFERENCES atlas_follow_ups (tenant_id, follow_up_id),
+  FOREIGN KEY (actor_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_crm_activity_events_canonical_id CHECK (crm_activity_event_id LIKE 'CRM-EVT-________-____-____-____-____________'),
+  CONSTRAINT atlas_crm_activity_events_resource CHECK ((sales_activity_id IS NOT NULL AND follow_up_id IS NULL) OR (sales_activity_id IS NULL AND follow_up_id IS NOT NULL))
+);
+CREATE INDEX atlas_crm_activity_events_activity_idx ON atlas_crm_activity_events (tenant_id, sales_activity_id, occurred_at DESC, crm_activity_event_id DESC) WHERE sales_activity_id IS NOT NULL;
+CREATE INDEX atlas_crm_activity_events_follow_up_idx ON atlas_crm_activity_events (tenant_id, follow_up_id, occurred_at DESC, crm_activity_event_id DESC) WHERE follow_up_id IS NOT NULL;
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -875,5 +932,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0005_domain_supporting_workflows', supportSql),
   migration('0006_internal_jobs_and_assets', internalJobsAssetsSql),
   migration('0007_physical_tooling_traceability', physicalToolingSql),
-  migration('0008_physical_wip_bins', wipBinsSql)
+  migration('0008_physical_wip_bins', wipBinsSql),
+  migration('0009_crm_activity_follow_up', crmActivityFollowUpSql)
 ]);
