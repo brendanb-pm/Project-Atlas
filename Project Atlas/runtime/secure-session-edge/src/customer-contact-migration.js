@@ -6,7 +6,10 @@ const MAX_ROWS = 10000;
 const CONTACT_ID = /^CONTACT-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CUSTOMER_ID = /^[A-Z][A-Z0-9]*-[A-Za-z0-9-]{1,119}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const SAFE_SOURCE_ID = /^[^\u0000-\u001f\u007f]{1,128}$/;
 const STATUSES = new Set(['ACTIVE', 'ARCHIVED']);
+const AUTHORIZED_EXCLUSION_REASON = 'AUTHORIZED_TEST_DATA';
+const EXCLUSION_COLLECTIONS = Object.freeze({ CUSTOMER: 'customers', CONTACT: 'contacts', RFQ: 'rfqs', SALES_ACTIVITY: 'salesActivities' });
 const EPOCH = '1970-01-01T00:00:00.000Z';
 
 function freeze(value) {
@@ -44,6 +47,16 @@ function sourceIdentity(row, entity) {
   const canonicalFields = { CUSTOMER: ['CustomerID'], CONTACT: ['ContactID'], RFQ: ['RFQID'], SALES_ACTIVITY: ['SalesActivityID'] }[entity] || [];
   return text(field(row, 'sourceId', 'SourceRowID', '_sourceId', 'rowId', 'RowID', ...canonicalFields, 'id'));
 }
+function exclusionManifest(entries) {
+  if (!Array.isArray(entries) || entries.length > MAX_ROWS) throw new Error('Source exclusion manifest is invalid.');
+  const keys = new Set();
+  return freeze(entries.map((entry) => {
+    const entity = text(entry?.entity).toUpperCase(); const sourceId = text(entry?.sourceId); const reasonCode = text(entry?.reasonCode).toUpperCase(); const authorizedBy = text(entry?.authorizedBy); const decisionReference = text(entry?.decisionReference);
+    if (!EXCLUSION_COLLECTIONS[entity] || !SAFE_SOURCE_ID.test(sourceId) || reasonCode !== AUTHORIZED_EXCLUSION_REASON || !SAFE_ID.test(authorizedBy) || !SAFE_ID.test(decisionReference)) throw new Error('Source exclusion manifest is invalid.');
+    const key = `${entity}:\u0000${sourceId}`; if (keys.has(key)) throw new Error('Source exclusion manifest contains a duplicate entry.'); keys.add(key);
+    return { entity, sourceId, reasonCode, authorizedBy, decisionReference };
+  }));
+}
 function compatible(left, right, fields) { return fields.every((name) => String(left?.[name] ?? '') === String(right?.[name] ?? '')); }
 function reconcileTargetState(plan, targetState, issues) {
   const actions = { customers: { inserts: 0, alreadyPresent: 0, conflicts: 0 }, contacts: { inserts: 0, alreadyPresent: 0, conflicts: 0 } };
@@ -60,9 +73,9 @@ function reconcileTargetState(plan, targetState, issues) {
 
 /** Bounded immutable source-export reader. A production Sheets exporter supplies readChunk; this class never writes Sheets. */
 export class LegacyCustomerContactSourceReader {
-  constructor({ readChunk, batchSize = 100, maxRows = MAX_ROWS } = {}) {
+  constructor({ readChunk, batchSize = 100, maxRows = MAX_ROWS, exclusions = [] } = {}) {
     if (typeof readChunk !== 'function' || !Number.isInteger(batchSize) || batchSize < 1 || batchSize > MAX_BATCH || !Number.isInteger(maxRows) || maxRows < 1 || maxRows > MAX_ROWS) throw new Error('Bounded source reader configuration is invalid.');
-    this.readChunk = readChunk; this.batchSize = batchSize; this.maxRows = maxRows;
+    this.readChunk = readChunk; this.batchSize = batchSize; this.maxRows = maxRows; this.exclusions = exclusionManifest(exclusions);
   }
   async read(context) {
     const scope = trustedContext(context); const snapshot = { customers: [], contacts: [], rfqs: [], salesActivities: [] }; const cursors = new Set(); let cursor = null; let total = 0;
@@ -78,7 +91,19 @@ export class LegacyCustomerContactSourceReader {
       if (next && (next.length > 512 || cursors.has(next))) throw new Error('Source cursor is invalid.');
       if (next) cursors.add(next); cursor = next;
     } while (cursor);
-    return freeze({ ...snapshot, sourceFingerprint: fingerprint(snapshot), sourceRows: total });
+    const rawSourceCounts = { customers: snapshot.customers.length, contacts: snapshot.contacts.length, rfqs: snapshot.rfqs.length, salesActivities: snapshot.salesActivities.length };
+    const excludedKeys = new Set();
+    for (const exclusion of this.exclusions) {
+      const collection = EXCLUSION_COLLECTIONS[exclusion.entity]; const matches = snapshot[collection].filter((row) => sourceIdentity(row, exclusion.entity) === exclusion.sourceId);
+      if (matches.length !== 1) throw new Error('Every authorized source exclusion must match exactly one source record.');
+      excludedKeys.add(`${exclusion.entity}:\u0000${exclusion.sourceId}`);
+    }
+    const effective = Object.fromEntries(Object.entries(snapshot).map(([collection, rows]) => {
+      const entity = Object.entries(EXCLUSION_COLLECTIONS).find(([, name]) => name === collection)?.[0];
+      return [collection, rows.filter((row) => !excludedKeys.has(`${entity}:\u0000${sourceIdentity(row, entity)}`))];
+    }));
+    const rawSourceFingerprint = fingerprint(snapshot);
+    return freeze({ ...effective, sourceFingerprint: this.exclusions.length ? fingerprint({ snapshot, exclusions: this.exclusions }) : rawSourceFingerprint, rawSourceFingerprint, sourceRows: total - this.exclusions.length, rawSourceRows: total, rawSourceCounts, excludedRecords: this.exclusions });
   }
 }
 
@@ -144,7 +169,7 @@ export class CustomerContactMigration {
       if (matches.length !== 1 || matches[0].customerId !== customerId) { issues.push(issue('BLOCKING', matches.length !== 1 ? 'CONTACT_REFERENCE_AMBIGUOUS' : 'CONTACT_REFERENCE_CUSTOMER_CONFLICT', entity, sourceId, 'Contact reference is conflicting.')); references.push(freeze({ entity, sourceId, customerId, legacyContactId, contactId: null, classification: 'CONFLICTING' })); continue; }
       references.push(freeze({ entity, sourceId, customerId, legacyContactId, contactId: matches[0].contactId, classification: 'RESOLVED' }));
     }
-    const preliminary = { tenantId: scope.tenantId, sourceFingerprint: snapshot.sourceFingerprint, sourceCounts: { customers: snapshot.customers.length, contacts: snapshot.contacts.length, rfqs: snapshot.rfqs.length, salesActivities: snapshot.salesActivities.length }, customers, contacts, references, unresolvedReferences, issues };
+    const preliminary = { tenantId: scope.tenantId, sourceFingerprint: snapshot.sourceFingerprint, rawSourceFingerprint: snapshot.rawSourceFingerprint, sourceCounts: { customers: snapshot.customers.length, contacts: snapshot.contacts.length, rfqs: snapshot.rfqs.length, salesActivities: snapshot.salesActivities.length }, rawSourceCounts: snapshot.rawSourceCounts, excludedRecords: snapshot.excludedRecords, customers, contacts, references, unresolvedReferences, issues };
     let targetState; try { targetState = await this.target.inspect(preliminary, scope); } catch { throw new Error('Migration target inspection is unavailable.'); } const actions = this.reconcileTarget(preliminary, targetState, issues);
     return freeze({ ...preliminary, issues, actions, blocking: issues.filter((item) => item.severity === 'BLOCKING').length, warnings: issues.filter((item) => item.severity === 'WARNING').length, batchSize: this.sourceReader.batchSize || MAX_BATCH, targetState });
   }
@@ -160,7 +185,7 @@ export class CustomerContactMigration {
     const plan = await this.plan(scope, options); if (plan.blocking) return this.report('MIGRATE', plan, null, 'BLOCKED');
     let database, prerequisites; try { [database, prerequisites] = await Promise.all([this.installationReadiness.inspect(), this.installationPrerequisites(scope)]); } catch { database = { state: 'UNAVAILABLE', checks: {} }; prerequisites = { overall: 'NOT_READY' }; } const applicationRole = database?.checks?.applicationRole?.state; const migrationRole = database?.checks?.migrationRole?.state;
     if (database?.state !== 'READY' || applicationRole !== 'PASS' || migrationRole !== 'PASS' || prerequisites?.overall !== 'READY_FOR_NEXT_STEP') return freeze({ ...this.report('MIGRATE', plan, null, 'BLOCKED'), databaseReadiness: database?.state || 'UNAVAILABLE', installationReadiness: prerequisites?.overall || 'NOT_READY', applicationRole: applicationRole || 'UNAVAILABLE', migrationRole: migrationRole || 'UNAVAILABLE' });
-    const run = freeze({ runId: options.runId, tenantId: scope.tenantId, mode: 'MIGRATE', sourceFingerprint: plan.sourceFingerprint, softwareVersion: this.softwareVersion, schemaMigrationLevel: database?.checks?.migration?.code || 'CURRENT', operatorId: scope.userId, startedAt: this.clock().toISOString(), counts: plan.sourceCounts, blockingIssues: 0, warnings: plan.warnings });
+    const run = freeze({ runId: options.runId, tenantId: scope.tenantId, mode: 'MIGRATE', sourceFingerprint: plan.sourceFingerprint, rawSourceFingerprint: plan.rawSourceFingerprint, softwareVersion: this.softwareVersion, schemaMigrationLevel: database?.checks?.migration?.code || 'CURRENT', operatorId: scope.userId, startedAt: this.clock().toISOString(), counts: plan.sourceCounts, rawCounts: plan.rawSourceCounts, excludedRecords: plan.excludedRecords, blockingIssues: 0, warnings: plan.warnings });
     try {
       if (this.target.recordRun) await this.target.recordRun(run, 'RUNNING', scope);
       const result = await this.target.migrate(plan, run, scope); const verification = await this.target.verify(plan, scope); const resultState = verification?.state === 'PASS' ? 'PASS' : 'FAILED';
@@ -180,7 +205,7 @@ export class CustomerContactMigration {
       referenceCounts[classification] += 1;
       referenceCounts.byEntity[ref.entity][classification] += 1;
     }
-    return freeze({ mode, state: state || (plan.blocking ? 'NOT_READY' : 'READY'), tenantId: plan.tenantId, sourceFingerprint: plan.sourceFingerprint, sourceCounts: plan.sourceCounts, customerCounts: { valid: plan.customers.length, rejected: plan.sourceCounts.customers - plan.customers.length, archived: plan.customers.filter((row) => row.status === 'ARCHIVED').length, ...plan.actions.customers }, contactCounts: { valid: plan.contacts.length, rejected: plan.sourceCounts.contacts - plan.contacts.length, archived: plan.contacts.filter((row) => row.status === 'ARCHIVED').length, ...plan.actions.contacts }, referenceCounts, unresolvedReferences: plan.unresolvedReferences, issues: plan.issues, blocking: plan.blocking, warnings: plan.warnings, batchSize: plan.batchSize, verification: verification || null, audit: audit ? freeze(audit) : null });
+    return freeze({ mode, state: state || (plan.blocking ? 'NOT_READY' : 'READY'), tenantId: plan.tenantId, sourceFingerprint: plan.sourceFingerprint, rawSourceFingerprint: plan.rawSourceFingerprint, sourceCounts: plan.sourceCounts, rawSourceCounts: plan.rawSourceCounts, excludedRecords: plan.excludedRecords, exclusionCount: plan.excludedRecords.length, customerCounts: { valid: plan.customers.length, rejected: plan.sourceCounts.customers - plan.customers.length, archived: plan.customers.filter((row) => row.status === 'ARCHIVED').length, ...plan.actions.customers }, contactCounts: { valid: plan.contacts.length, rejected: plan.sourceCounts.contacts - plan.contacts.length, archived: plan.contacts.filter((row) => row.status === 'ARCHIVED').length, ...plan.actions.contacts }, referenceCounts, unresolvedReferences: plan.unresolvedReferences, issues: plan.issues, blocking: plan.blocking, warnings: plan.warnings, batchSize: plan.batchSize, verification: verification || null, audit: audit ? freeze(audit) : null });
   }
   async cutoverReadiness(scope, plan, verification) {
     let database, prerequisites; try { [database, prerequisites] = await Promise.all([this.installationReadiness.inspect(), this.installationPrerequisites(scope)]); } catch { database = { state: 'UNAVAILABLE', checks: {} }; prerequisites = { overall: 'NOT_READY' }; }
