@@ -991,6 +991,98 @@ ALTER TABLE atlas_follow_ups ADD CONSTRAINT atlas_follow_up_lead_fk FOREIGN KEY 
 CREATE INDEX atlas_follow_ups_lead_due_idx ON atlas_follow_ups (tenant_id, lead_id, status, due_at, follow_up_id) WHERE lead_id IS NOT NULL AND archived_at IS NULL;
 `;
 
+const contextualAttachmentsSql = `
+CREATE TABLE atlas_contextual_attachments (
+  tenant_id TEXT NOT NULL,
+  attachment_id TEXT NOT NULL,
+  parent_type TEXT NOT NULL CHECK (parent_type IN ('TOOL_INSTANCE','TOOL_ASSEMBLY','PURCHASE_REQUEST','JOB','JOB_OPERATION')),
+  parent_id TEXT NOT NULL,
+  tool_instance_id TEXT,
+  tool_assembly_id TEXT,
+  purchase_request_id TEXT,
+  job_id TEXT,
+  job_operation_id TEXT,
+  file_name TEXT NOT NULL,
+  media_type TEXT NOT NULL,
+  byte_size BIGINT NOT NULL CHECK (byte_size >= 0 AND byte_size <= 52428800),
+  checksum_sha256 TEXT,
+  category TEXT NOT NULL DEFAULT 'GENERAL' CHECK (category IN ('PHOTO','DRAWING','INSPECTION','RECEIPT','CERTIFICATE','GENERAL')),
+  description TEXT,
+  storage_provider TEXT NOT NULL CHECK (storage_provider IN ('S3','AZURE_BLOB','TEST')),
+  storage_reference TEXT NOT NULL,
+  upload_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (upload_status IN ('PENDING','AVAILABLE','FAILED','ARCHIVED')),
+  processing_status TEXT NOT NULL DEFAULT 'NOT_REQUESTED' CHECK (processing_status IN ('NOT_REQUESTED','PENDING','COMPLETE','FAILED')),
+  processing_provenance_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  idempotency_key_hash TEXT NOT NULL,
+  failure_code TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  uploaded_by_user_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  archived_at TIMESTAMPTZ,
+  PRIMARY KEY (tenant_id, attachment_id),
+  UNIQUE (tenant_id, idempotency_key_hash),
+  UNIQUE (tenant_id, storage_provider, storage_reference),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id),
+  FOREIGN KEY (uploaded_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (tenant_id, tool_assembly_id) REFERENCES atlas_tool_assemblies (tenant_id, tool_assembly_id),
+  FOREIGN KEY (tenant_id, purchase_request_id) REFERENCES atlas_purchase_requests (tenant_id, purchase_request_id),
+  FOREIGN KEY (tenant_id, job_id) REFERENCES atlas_jobs (tenant_id, job_id),
+  FOREIGN KEY (tenant_id, job_operation_id) REFERENCES atlas_job_operations (tenant_id, job_operation_id),
+  CONSTRAINT atlas_contextual_attachments_id CHECK (attachment_id LIKE 'ATTACH-________-____-____-____-____________'),
+  CONSTRAINT atlas_contextual_attachments_hash CHECK (idempotency_key_hash LIKE '________________________________________________________________'),
+  CONSTRAINT atlas_contextual_attachments_checksum CHECK (checksum_sha256 IS NULL OR checksum_sha256 LIKE '________________________________________________________________'),
+  CONSTRAINT atlas_contextual_attachments_parent CHECK (
+    (parent_type='TOOL_INSTANCE' AND parent_id=tool_instance_id AND tool_instance_id IS NOT NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NULL AND job_id IS NULL AND job_operation_id IS NULL) OR
+    (parent_type='TOOL_ASSEMBLY' AND parent_id=tool_assembly_id AND tool_instance_id IS NULL AND tool_assembly_id IS NOT NULL AND purchase_request_id IS NULL AND job_id IS NULL AND job_operation_id IS NULL) OR
+    (parent_type='PURCHASE_REQUEST' AND parent_id=purchase_request_id AND tool_instance_id IS NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NOT NULL AND job_id IS NULL AND job_operation_id IS NULL) OR
+    (parent_type='JOB' AND parent_id=job_id AND tool_instance_id IS NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NULL AND job_id IS NOT NULL AND job_operation_id IS NULL) OR
+    (parent_type='JOB_OPERATION' AND parent_id=job_operation_id AND tool_instance_id IS NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NULL AND job_id IS NULL AND job_operation_id IS NOT NULL)
+  ),
+  CONSTRAINT atlas_contextual_attachments_lifecycle CHECK ((upload_status='ARCHIVED' AND archived_at IS NOT NULL) OR (upload_status<>'ARCHIVED' AND archived_at IS NULL))
+);
+CREATE INDEX atlas_contextual_attachments_parent_idx ON atlas_contextual_attachments (tenant_id, parent_type, parent_id, created_at DESC, attachment_id DESC) WHERE upload_status<>'ARCHIVED';
+CREATE INDEX atlas_contextual_attachments_uploader_idx ON atlas_contextual_attachments (tenant_id, uploaded_by_user_id, created_at DESC, attachment_id DESC) WHERE upload_status<>'ARCHIVED';
+CREATE INDEX atlas_contextual_attachments_status_idx ON atlas_contextual_attachments (tenant_id, upload_status, processing_status, updated_at, attachment_id) WHERE upload_status IN ('PENDING','FAILED');
+
+CREATE TABLE atlas_contextual_attachment_events (
+  tenant_id TEXT NOT NULL,
+  attachment_event_id TEXT NOT NULL,
+  attachment_id TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('UPLOAD_STARTED','UPLOAD_COMPLETED','UPLOAD_FAILED','METADATA_UPDATED','ARCHIVED','PROCESSING_UPDATED')),
+  occurred_at TIMESTAMPTZ NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  previous_version INTEGER,
+  new_version INTEGER NOT NULL,
+  details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (tenant_id, attachment_event_id),
+  FOREIGN KEY (tenant_id, attachment_id) REFERENCES atlas_contextual_attachments (tenant_id, attachment_id),
+  FOREIGN KEY (actor_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_contextual_attachment_events_id CHECK (attachment_event_id LIKE 'ATTACH-EVT-________-____-____-____-____________')
+);
+CREATE INDEX atlas_contextual_attachment_events_history_idx ON atlas_contextual_attachment_events (tenant_id, attachment_id, occurred_at DESC, attachment_event_id DESC);
+
+CREATE TABLE atlas_tool_manual_entry_events (
+  tenant_id TEXT NOT NULL,
+  manual_entry_event_id TEXT NOT NULL,
+  tool_instance_id TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('CREATED','UPDATED')),
+  occurred_at TIMESTAMPTZ NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  previous_version INTEGER,
+  new_version INTEGER NOT NULL,
+  details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (tenant_id, manual_entry_event_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (actor_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_tool_manual_entry_events_id CHECK (manual_entry_event_id LIKE 'MANUAL-EVT-________-____-____-____-____________')
+);
+CREATE INDEX atlas_tool_manual_entry_events_history_idx ON atlas_tool_manual_entry_events (tenant_id, tool_instance_id, occurred_at DESC, manual_entry_event_id DESC);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -1004,5 +1096,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0007_physical_tooling_traceability', physicalToolingSql),
   migration('0008_physical_wip_bins', wipBinsSql),
   migration('0009_crm_activity_follow_up', crmActivityFollowUpSql),
-  migration('0010_unified_lead_intake', unifiedLeadIntakeSql)
+  migration('0010_unified_lead_intake', unifiedLeadIntakeSql),
+  migration('0011_contextual_attachments', contextualAttachmentsSql)
 ]);

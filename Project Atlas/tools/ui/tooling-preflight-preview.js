@@ -24,7 +24,7 @@ function model(state) {
   return {
     selectedId: id,
     results: [{ id, description: '1/2 in carbide end mill', condition: fixture.condition, location: fixture.holder ? 'Haas VF-4 / T12' : 'Tool crib A-14' }, { id: 'TOOL-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', description: '1/4 in carbide end mill', condition: 'USED', location: 'Tool crib B-03' }],
-    tool: { id, description: '1/2 in carbide end mill · Nanoverse 8767-00 fixture', nominalDiameter: 0.5, actualDiameter: fixture.actual, unitLabel: 'in', condition: fixture.condition, verificationStatus: fixture.verification, measurementAge: fixture.actual == null ? '' : 'measured 1 hour ago' },
+    tool: { id, toolTypeId: 'TOOL-TYPE-11111111-1111-4111-8111-111111111111', description: '1/2 in carbide end mill · Nanoverse 8767-00 fixture', nominalDiameter: 0.5, actualDiameter: fixture.actual, unitLabel: 'in', condition: fixture.condition, verificationStatus: fixture.verification, measurementAge: fixture.actual == null ? '' : 'measured 1 hour ago', serialLotIdentifier: 'LOT-8767', location: 'Tool crib A-14', notes: 'Operator-entered tooling record', version: 3 },
     assembly: fixture.holder ? { id: 'TOOL-ASM-55555555-5555-4555-8555-555555555555', holderId: 'HOLDER-44444444-4444-4444-8444-444444444444', machine: 'Haas VF-4', pocket: 'T12', state: 'ACTIVE / VERIFIED' } : { state: 'EMPTY' },
     operation: { reference: '8767-00 · OP2 · 2D CONTOUR', expectedDiameter: 0.5, radialStockToLeave: 0.004 },
     preflight: { state: fixture.preflight, ready: ['READY', 'WARNING'].includes(fixture.preflight), reasons: fixture.reasons }
@@ -33,7 +33,7 @@ function model(state) {
 
 function mockScript(state, fail) {
   const data = JSON.stringify(model(state));
-  return `<script>var __toolingData=${data};var __toolingFail=${fail ? 'true' : 'false'};var google={script:{run:{ok:null,bad:null,withSuccessHandler:function(f){this.ok=f;return this;},withFailureHandler:function(f){this.bad=f;return this;},getToolingWorkspace:function(){var ok=this.ok,bad=this.bad;setTimeout(function(){__toolingFail?bad({message:'Unavailable'}):ok({ok:true,data:__toolingData});},40);},getToolingDetail:function(){var ok=this.ok,bad=this.bad;setTimeout(function(){__toolingFail?bad({message:'Unavailable'}):ok({ok:true,data:__toolingData});},40);}}}};<\/script>`;
+  return `<script>var __toolingData=${data};var __toolingFail=${fail ? 'true' : 'false'};var google={script:{run:{ok:null,bad:null,withSuccessHandler:function(f){this.ok=f;return this;},withFailureHandler:function(f){this.bad=f;return this;},getToolingWorkspace:function(){var ok=this.ok,bad=this.bad;setTimeout(function(){__toolingFail?bad({message:'Unavailable'}):ok({ok:true,data:__toolingData});},40);},getToolingDetail:function(){var ok=this.ok,bad=this.bad;setTimeout(function(){__toolingFail?bad({message:'Unavailable'}):ok({ok:true,data:__toolingData});},40);},saveToolInstanceManual:function(payload){var ok=this.ok;setTimeout(function(){ok({ok:true,data:{version:(payload.expectedVersion||0)+1}});},40);},listContextualAttachments:function(){var ok=this.ok;setTimeout(function(){ok({ok:true,data:{items:[{file_name:'flute-inspection.jpg',category:'INSPECTION',upload_status:'AVAILABLE',description:'Flute condition before setup'}]}});},40);},uploadContextualAttachment:function(){var ok=this.ok;setTimeout(function(){ok({ok:true,data:{upload_status:'AVAILABLE'}});},40);}}}};<\/script>`;
 }
 
 http.createServer((request, response) => {
