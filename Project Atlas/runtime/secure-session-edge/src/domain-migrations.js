@@ -921,6 +921,76 @@ CREATE INDEX atlas_crm_activity_events_activity_idx ON atlas_crm_activity_events
 CREATE INDEX atlas_crm_activity_events_follow_up_idx ON atlas_crm_activity_events (tenant_id, follow_up_id, occurred_at DESC, crm_activity_event_id DESC) WHERE follow_up_id IS NOT NULL;
 `;
 
+const unifiedLeadIntakeSql = `
+CREATE TABLE atlas_leads (
+  tenant_id TEXT NOT NULL,
+  lead_id TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('WEBSITE','EMAIL_IMPORT','PHONE','DEALER_REFERRAL','MANUAL','SOCIAL')),
+  ingestion_key_hash TEXT NOT NULL,
+  ingestion_payload_hash TEXT NOT NULL,
+  source_reference TEXT,
+  company_name TEXT,
+  contact_name TEXT,
+  email TEXT,
+  phone TEXT,
+  summary TEXT NOT NULL,
+  owner_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'NEW' CHECK (status IN ('NEW','QUALIFIED','CALLBACK_REQUIRED','CONTACTED','QUOTED','WON','LOST')),
+  customer_id TEXT,
+  contact_id TEXT,
+  disposition TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  created_by_user_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  converted_at TIMESTAMPTZ,
+  converted_by_user_id TEXT,
+  archived_at TIMESTAMPTZ,
+  PRIMARY KEY (tenant_id, lead_id),
+  UNIQUE (tenant_id, ingestion_key_hash),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id),
+  FOREIGN KEY (tenant_id, customer_id) REFERENCES atlas_customers (tenant_id, customer_id),
+  FOREIGN KEY (tenant_id, customer_id, contact_id) REFERENCES atlas_contacts (tenant_id, customer_id, contact_id),
+  FOREIGN KEY (owner_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (created_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (converted_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_leads_canonical_id CHECK (lead_id LIKE 'LEAD-________-____-____-____-____________'),
+  CONSTRAINT atlas_leads_ingestion_hash CHECK (ingestion_key_hash LIKE '________________________________________________________________'),
+  CONSTRAINT atlas_leads_payload_hash CHECK (ingestion_payload_hash LIKE '________________________________________________________________'),
+  CONSTRAINT atlas_leads_conversion CHECK ((converted_at IS NULL AND converted_by_user_id IS NULL AND customer_id IS NULL AND contact_id IS NULL) OR (converted_at IS NOT NULL AND converted_by_user_id IS NOT NULL AND customer_id IS NOT NULL))
+);
+CREATE INDEX atlas_leads_queue_idx ON atlas_leads (tenant_id, status, owner_user_id, created_at, lead_id) WHERE archived_at IS NULL;
+CREATE INDEX atlas_leads_source_idx ON atlas_leads (tenant_id, source, created_at DESC, lead_id DESC) WHERE archived_at IS NULL;
+CREATE INDEX atlas_leads_customer_idx ON atlas_leads (tenant_id, customer_id, converted_at DESC, lead_id) WHERE customer_id IS NOT NULL;
+
+CREATE TABLE atlas_lead_events (
+  tenant_id TEXT NOT NULL,
+  lead_event_id TEXT NOT NULL,
+  lead_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  previous_status TEXT,
+  next_status TEXT NOT NULL,
+  previous_version INTEGER,
+  new_version INTEGER NOT NULL,
+  details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (tenant_id, lead_event_id),
+  FOREIGN KEY (tenant_id, lead_id) REFERENCES atlas_leads (tenant_id, lead_id),
+  FOREIGN KEY (actor_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_lead_events_canonical_id CHECK (lead_event_id LIKE 'LEAD-EVT-________-____-____-____-____________')
+);
+CREATE INDEX atlas_lead_events_history_idx ON atlas_lead_events (tenant_id, lead_id, occurred_at DESC, lead_event_id DESC);
+
+ALTER TABLE atlas_sales_activities ADD COLUMN lead_id TEXT;
+ALTER TABLE atlas_sales_activities ADD CONSTRAINT atlas_sales_activity_lead_fk FOREIGN KEY (tenant_id, lead_id) REFERENCES atlas_leads (tenant_id, lead_id);
+CREATE INDEX atlas_sales_activities_lead_timeline_idx ON atlas_sales_activities (tenant_id, lead_id, occurred_at DESC, sales_activity_id DESC) WHERE lead_id IS NOT NULL AND archived_at IS NULL;
+ALTER TABLE atlas_follow_ups ADD COLUMN lead_id TEXT;
+ALTER TABLE atlas_follow_ups ADD CONSTRAINT atlas_follow_up_lead_fk FOREIGN KEY (tenant_id, lead_id) REFERENCES atlas_leads (tenant_id, lead_id);
+CREATE INDEX atlas_follow_ups_lead_due_idx ON atlas_follow_ups (tenant_id, lead_id, status, due_at, follow_up_id) WHERE lead_id IS NOT NULL AND archived_at IS NULL;
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -933,5 +1003,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0006_internal_jobs_and_assets', internalJobsAssetsSql),
   migration('0007_physical_tooling_traceability', physicalToolingSql),
   migration('0008_physical_wip_bins', wipBinsSql),
-  migration('0009_crm_activity_follow_up', crmActivityFollowUpSql)
+  migration('0009_crm_activity_follow_up', crmActivityFollowUpSql),
+  migration('0010_unified_lead_intake', unifiedLeadIntakeSql)
 ]);
