@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { errors } from './errors.js';
+import { EdgeError, errors } from './errors.js';
 
 const { Pool } = pg;
 const TRANSIENT_CODES = new Set(['40001', '40P01', '57P01', '57P02', '57P03', '53300', '57014', '08000', '08003', '08006']);
@@ -77,12 +77,13 @@ export class PostgresTransaction {
   constructor(runtime, client) { this.runtime = runtime; this.client = client; this.active = true; }
   async query(text, values = [], operation = 'TRANSACTION_QUERY') {
     if (!this.active) throw errors.persistenceUnavailable();
-    try { return await this.client.query({ text, values, query_timeout: this.runtime.config.pool.statementTimeoutMs }); } catch (error) { throw mapPgError(error); }
+    try { return await this.client.query({ text, values, query_timeout: this.runtime.config.pool.statementTimeoutMs }); } catch (error) { const mapped=mapPgError(error);mapped.cause=error;throw mapped; }
   }
   async withTransaction() { throw new Error('Nested PostgreSQL transactions are unsupported.'); }
 }
 
 export function mapPgError(error) {
+  if (error instanceof EdgeError) return error;
   if (error?.code === '23505') return errors.persistenceConflict();
   if (error?.code === '40001' || error?.code === '40P01') return errors.persistenceConflict();
   if (error?.code === '42501') return errors.forbidden();

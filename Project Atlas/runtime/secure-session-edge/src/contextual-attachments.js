@@ -33,24 +33,28 @@ function storageReference(tenantId, attachmentId) { return `${hash(tenantId).sli
 export class ObjectStorageRouter {
   constructor({ provider, adapters } = {}) { if (!PROVIDERS.has(provider) || !adapters?.[provider]) throw new Error('Configured object storage provider is unavailable.'); this.provider = provider; this.adapter = adapters[provider]; }
   async put(input) { await this.adapter.put(input); return { provider: this.provider, storageReference: input.storageReference }; }
+  async get(input) { if (!this.adapter.get) throw errors.persistenceUnavailable(); return this.adapter.get(input); }
   async remove(input) { return this.adapter.remove(input); }
 }
 
 export class S3ObjectStorageAdapter {
   constructor({ gateway, bucket } = {}) { if (!gateway?.putObject || !gateway?.deleteObject || !bucket) throw new Error('S3 object storage configuration is unavailable.'); this.gateway = gateway; this.bucket = bucket; }
   put({ storageReference, body, mediaType, checksumSha256 }) { return this.gateway.putObject({ bucket: this.bucket, key: storageReference, body, contentType: mediaType, checksumSha256 }); }
+  get({ storageReference }) { if (!this.gateway.getObject) throw new Error('S3 object read is unavailable.'); return this.gateway.getObject({ bucket: this.bucket, key: storageReference }); }
   remove({ storageReference }) { return this.gateway.deleteObject({ bucket: this.bucket, key: storageReference }); }
 }
 
 export class AzureBlobObjectStorageAdapter {
   constructor({ gateway, container } = {}) { if (!gateway?.upload || !gateway?.delete || !container) throw new Error('Azure Blob storage configuration is unavailable.'); this.gateway = gateway; this.container = container; }
   put({ storageReference, body, mediaType, checksumSha256 }) { return this.gateway.upload({ container: this.container, blobName: storageReference, body, contentType: mediaType, checksumSha256 }); }
+  get({ storageReference }) { if (!this.gateway.download) throw new Error('Azure Blob read is unavailable.'); return this.gateway.download({ container: this.container, blobName: storageReference }); }
   remove({ storageReference }) { return this.gateway.delete({ container: this.container, blobName: storageReference }); }
 }
 
 export class InMemoryObjectStorageAdapter {
   constructor() { this.objects = new Map(); }
   async put({ storageReference, body, mediaType, checksumSha256 }) { const bytes = Buffer.from(body); if (hash(bytes) !== checksumSha256) throw new Error('Object checksum mismatch.'); this.objects.set(storageReference, { body: bytes, mediaType, checksumSha256 }); }
+  async get({ storageReference }) { const value=this.objects.get(storageReference);if(!value)throw new Error('Object unavailable.');return { ...value, body: Buffer.from(value.body) }; }
   async remove({ storageReference }) { this.objects.delete(storageReference); }
 }
 

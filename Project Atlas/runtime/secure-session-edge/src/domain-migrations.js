@@ -1083,6 +1083,133 @@ CREATE TABLE atlas_tool_manual_entry_events (
 CREATE INDEX atlas_tool_manual_entry_events_history_idx ON atlas_tool_manual_entry_events (tenant_id, tool_instance_id, occurred_at DESC, manual_entry_event_id DESC);
 `;
 
+const aiExtractionProvenanceSql = `
+ALTER TABLE atlas_contextual_attachments ADD CONSTRAINT atlas_contextual_attachments_parent_identity UNIQUE (tenant_id, attachment_id, parent_type, parent_id);
+
+CREATE TABLE atlas_ai_processing_jobs (
+  tenant_id TEXT NOT NULL,
+  processing_job_id TEXT NOT NULL,
+  evidence_type TEXT NOT NULL CHECK (evidence_type IN ('ATTACHMENT','TEXT','COMBINED')),
+  attachment_id TEXT,
+  context_parent_type TEXT NOT NULL CHECK (context_parent_type IN ('TOOL_INSTANCE','TOOL_ASSEMBLY','PURCHASE_REQUEST','JOB','JOB_OPERATION')),
+  context_parent_id TEXT NOT NULL,
+  tool_instance_id TEXT,
+  tool_assembly_id TEXT,
+  purchase_request_id TEXT,
+  job_id TEXT,
+  job_operation_id TEXT,
+  source_text TEXT,
+  source_text_sha256 TEXT,
+  attachment_version INTEGER,
+  attachment_checksum_sha256 TEXT,
+  extraction_schema_id TEXT NOT NULL,
+  extraction_schema_version INTEGER NOT NULL CHECK (extraction_schema_version >= 1),
+  requested_operation TEXT NOT NULL CHECK (requested_operation IN ('STRUCTURED_EXTRACTION','CLASSIFICATION','SUMMARIZATION','MISSING_INFORMATION')),
+  provider_id TEXT NOT NULL,
+  provider_model_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('QUEUED','PROCESSING','COMPLETED','FAILED_RETRYABLE','FAILED_TERMINAL','CANCELLED','SUPERSEDED')),
+  retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0 AND retry_count <= 3),
+  failure_classification TEXT,
+  result_id TEXT,
+  idempotency_key_hash TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  requested_by_user_id TEXT NOT NULL,
+  requested_at TIMESTAMPTZ NOT NULL,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  provider_request_id TEXT,
+  usage_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  supersedes_processing_job_id TEXT,
+  PRIMARY KEY (tenant_id, processing_job_id),
+  UNIQUE (tenant_id, idempotency_key_hash),
+  UNIQUE (tenant_id, processing_job_id, context_parent_type, context_parent_id),
+  FOREIGN KEY (tenant_id) REFERENCES atlas_installation (tenant_id),
+  FOREIGN KEY (requested_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (tenant_id, attachment_id, context_parent_type, context_parent_id) REFERENCES atlas_contextual_attachments (tenant_id, attachment_id, parent_type, parent_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (tenant_id, tool_assembly_id) REFERENCES atlas_tool_assemblies (tenant_id, tool_assembly_id),
+  FOREIGN KEY (tenant_id, purchase_request_id) REFERENCES atlas_purchase_requests (tenant_id, purchase_request_id),
+  FOREIGN KEY (tenant_id, job_id) REFERENCES atlas_jobs (tenant_id, job_id),
+  FOREIGN KEY (tenant_id, job_operation_id) REFERENCES atlas_job_operations (tenant_id, job_operation_id),
+  FOREIGN KEY (tenant_id, supersedes_processing_job_id) REFERENCES atlas_ai_processing_jobs (tenant_id, processing_job_id),
+  CONSTRAINT atlas_ai_processing_jobs_id CHECK (processing_job_id LIKE 'AI-JOB-________-____-____-____-____________'),
+  CONSTRAINT atlas_ai_processing_jobs_hashes CHECK (idempotency_key_hash LIKE '________________________________________________________________' AND request_fingerprint LIKE '________________________________________________________________' AND (source_text_sha256 IS NULL OR source_text_sha256 LIKE '________________________________________________________________')),
+  CONSTRAINT atlas_ai_processing_jobs_evidence CHECK ((evidence_type='ATTACHMENT' AND attachment_id IS NOT NULL AND source_text IS NULL) OR (evidence_type='TEXT' AND attachment_id IS NULL AND source_text IS NOT NULL) OR (evidence_type='COMBINED' AND attachment_id IS NOT NULL AND source_text IS NOT NULL)),
+  CONSTRAINT atlas_ai_processing_jobs_parent CHECK (
+    (context_parent_type='TOOL_INSTANCE' AND context_parent_id=tool_instance_id AND tool_instance_id IS NOT NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NULL AND job_id IS NULL AND job_operation_id IS NULL) OR
+    (context_parent_type='TOOL_ASSEMBLY' AND context_parent_id=tool_assembly_id AND tool_instance_id IS NULL AND tool_assembly_id IS NOT NULL AND purchase_request_id IS NULL AND job_id IS NULL AND job_operation_id IS NULL) OR
+    (context_parent_type='PURCHASE_REQUEST' AND context_parent_id=purchase_request_id AND tool_instance_id IS NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NOT NULL AND job_id IS NULL AND job_operation_id IS NULL) OR
+    (context_parent_type='JOB' AND context_parent_id=job_id AND tool_instance_id IS NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NULL AND job_id IS NOT NULL AND job_operation_id IS NULL) OR
+    (context_parent_type='JOB_OPERATION' AND context_parent_id=job_operation_id AND tool_instance_id IS NULL AND tool_assembly_id IS NULL AND purchase_request_id IS NULL AND job_id IS NULL AND job_operation_id IS NOT NULL)
+  )
+);
+CREATE INDEX atlas_ai_processing_jobs_context_idx ON atlas_ai_processing_jobs (tenant_id, context_parent_type, context_parent_id, requested_at DESC, processing_job_id DESC);
+CREATE INDEX atlas_ai_processing_jobs_queue_idx ON atlas_ai_processing_jobs (tenant_id, status, requested_at, processing_job_id) WHERE status IN ('QUEUED','PROCESSING','FAILED_RETRYABLE');
+CREATE INDEX atlas_ai_processing_jobs_requester_idx ON atlas_ai_processing_jobs (tenant_id, requested_by_user_id, requested_at DESC, processing_job_id DESC);
+
+CREATE TABLE atlas_ai_processing_results (
+  tenant_id TEXT NOT NULL,
+  result_id TEXT NOT NULL,
+  processing_job_id TEXT NOT NULL,
+  schema_snapshot_json JSONB NOT NULL,
+  proposal_count INTEGER NOT NULL CHECK (proposal_count >= 0 AND proposal_count <= 100),
+  warnings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (tenant_id, result_id),
+  UNIQUE (tenant_id, processing_job_id),
+  FOREIGN KEY (tenant_id, processing_job_id) REFERENCES atlas_ai_processing_jobs (tenant_id, processing_job_id),
+  CONSTRAINT atlas_ai_processing_results_id CHECK (result_id LIKE 'AI-RESULT-________-____-____-____-____________')
+);
+
+CREATE TABLE atlas_ai_field_proposals (
+  tenant_id TEXT NOT NULL,
+  proposal_id TEXT NOT NULL,
+  result_id TEXT NOT NULL,
+  processing_job_id TEXT NOT NULL,
+  field_key TEXT NOT NULL,
+  expected_type TEXT NOT NULL CHECK (expected_type IN ('STRING','NUMBER','INTEGER','BOOLEAN','DATE','ENUM')),
+  proposed_value_json JSONB,
+  normalized_value_json JSONB,
+  unit TEXT,
+  proposal_state TEXT NOT NULL CHECK (proposal_state IN ('EXTRACTED','NOT_FOUND','AMBIGUOUS','CONFLICTING','INVALID','REQUIRES_HUMAN_INPUT')),
+  confidence_label TEXT CHECK (confidence_label IS NULL OR confidence_label IN ('HIGH','MEDIUM','LOW')),
+  validation_state TEXT NOT NULL CHECK (validation_state IN ('VALID','INVALID','NOT_APPLICABLE')),
+  evidence_type TEXT NOT NULL CHECK (evidence_type IN ('ATTACHMENT','TEXT','COMBINED')),
+  evidence_reference TEXT NOT NULL,
+  evidence_excerpt TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (tenant_id, proposal_id),
+  FOREIGN KEY (tenant_id, result_id) REFERENCES atlas_ai_processing_results (tenant_id, result_id),
+  FOREIGN KEY (tenant_id, processing_job_id) REFERENCES atlas_ai_processing_jobs (tenant_id, processing_job_id),
+  CONSTRAINT atlas_ai_field_proposals_id CHECK (proposal_id LIKE 'AI-PROP-________-____-____-____-____________')
+);
+CREATE INDEX atlas_ai_field_proposals_result_idx ON atlas_ai_field_proposals (tenant_id, result_id, field_key, proposal_id);
+CREATE INDEX atlas_ai_field_proposals_job_idx ON atlas_ai_field_proposals (tenant_id, processing_job_id, field_key, proposal_id);
+
+CREATE TABLE atlas_ai_processing_events (
+  tenant_id TEXT NOT NULL,
+  processing_event_id TEXT NOT NULL,
+  processing_job_id TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('QUEUED','PROCESSING_STARTED','COMPLETED','FAILED_RETRYABLE','FAILED_TERMINAL','RETRY_QUEUED','CANCELLED','SUPERSEDED')),
+  occurred_at TIMESTAMPTZ NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  previous_status TEXT,
+  next_status TEXT NOT NULL,
+  attempt_number INTEGER NOT NULL CHECK (attempt_number >= 0 AND attempt_number <= 3),
+  failure_classification TEXT,
+  details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (tenant_id, processing_event_id),
+  FOREIGN KEY (tenant_id, processing_job_id) REFERENCES atlas_ai_processing_jobs (tenant_id, processing_job_id),
+  FOREIGN KEY (actor_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_ai_processing_events_id CHECK (processing_event_id LIKE 'AI-EVT-________-____-____-____-____________')
+);
+CREATE INDEX atlas_ai_processing_events_history_idx ON atlas_ai_processing_events (tenant_id, processing_job_id, occurred_at DESC, processing_event_id DESC);
+
+ALTER TABLE atlas_ai_processing_jobs ADD CONSTRAINT atlas_ai_processing_jobs_result_fk FOREIGN KEY (tenant_id, result_id) REFERENCES atlas_ai_processing_results (tenant_id, result_id);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -1097,5 +1224,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0008_physical_wip_bins', wipBinsSql),
   migration('0009_crm_activity_follow_up', crmActivityFollowUpSql),
   migration('0010_unified_lead_intake', unifiedLeadIntakeSql),
-  migration('0011_contextual_attachments', contextualAttachmentsSql)
+  migration('0011_contextual_attachments', contextualAttachmentsSql),
+  migration('0012_ai_extraction_provenance', aiExtractionProvenanceSql)
 ]);
