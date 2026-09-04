@@ -1210,6 +1210,83 @@ CREATE INDEX atlas_ai_processing_events_history_idx ON atlas_ai_processing_event
 ALTER TABLE atlas_ai_processing_jobs ADD CONSTRAINT atlas_ai_processing_jobs_result_fk FOREIGN KEY (tenant_id, result_id) REFERENCES atlas_ai_processing_results (tenant_id, result_id);
 `;
 
+const aiHumanReviewSql = `
+ALTER TABLE atlas_ai_field_proposals ADD CONSTRAINT atlas_ai_field_proposals_job_identity UNIQUE (tenant_id, proposal_id, processing_job_id);
+
+CREATE TABLE atlas_ai_review_sessions (
+  tenant_id TEXT NOT NULL,
+  review_session_id TEXT NOT NULL,
+  processing_job_id TEXT NOT NULL,
+  context_parent_type TEXT NOT NULL,
+  context_parent_id TEXT NOT NULL,
+  tool_instance_id TEXT,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','COMMITTED','CANCELLED','STALE')),
+  base_authoritative_version INTEGER NOT NULL CHECK (base_authoritative_version >= 1),
+  source_state_at_open TEXT NOT NULL CHECK (source_state_at_open IN ('CURRENT','STATIC_TEXT')),
+  initiated_by_user_id TEXT NOT NULL,
+  initiated_at TIMESTAMPTZ NOT NULL,
+  reviewed_by_user_id TEXT,
+  reviewed_at TIMESTAMPTZ,
+  resulting_record_type TEXT,
+  resulting_record_id TEXT,
+  resulting_record_version INTEGER,
+  idempotency_key_hash TEXT NOT NULL,
+  commit_idempotency_key_hash TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  PRIMARY KEY (tenant_id, review_session_id),
+  UNIQUE (tenant_id, idempotency_key_hash),
+  FOREIGN KEY (tenant_id, processing_job_id, context_parent_type, context_parent_id) REFERENCES atlas_ai_processing_jobs (tenant_id, processing_job_id, context_parent_type, context_parent_id),
+  FOREIGN KEY (tenant_id, tool_instance_id) REFERENCES atlas_tool_instances (tenant_id, tool_instance_id),
+  FOREIGN KEY (initiated_by_user_id) REFERENCES atlas_users (user_id),
+  FOREIGN KEY (reviewed_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_ai_review_sessions_id CHECK (review_session_id LIKE 'AI-REVIEW-________-____-____-____-____________'),
+  CONSTRAINT atlas_ai_review_sessions_parent CHECK ((context_parent_type='TOOL_INSTANCE' AND context_parent_id=tool_instance_id AND tool_instance_id IS NOT NULL)),
+  CONSTRAINT atlas_ai_review_sessions_result CHECK ((status='COMMITTED' AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL AND resulting_record_type IS NOT NULL AND resulting_record_id IS NOT NULL AND resulting_record_version IS NOT NULL AND commit_idempotency_key_hash IS NOT NULL) OR status<>'COMMITTED')
+);
+CREATE INDEX atlas_ai_review_sessions_context_idx ON atlas_ai_review_sessions (tenant_id, context_parent_type, context_parent_id, initiated_at DESC, review_session_id DESC);
+CREATE INDEX atlas_ai_review_sessions_draft_idx ON atlas_ai_review_sessions (tenant_id, initiated_by_user_id, initiated_at DESC, review_session_id DESC) WHERE status='DRAFT';
+
+CREATE TABLE atlas_ai_field_reviews (
+  tenant_id TEXT NOT NULL,
+  field_review_id TEXT NOT NULL,
+  review_session_id TEXT NOT NULL,
+  proposal_id TEXT NOT NULL,
+  processing_job_id TEXT NOT NULL,
+  field_key TEXT NOT NULL,
+  disposition TEXT NOT NULL DEFAULT 'PENDING' CHECK (disposition IN ('PENDING','ACCEPTED','EDITED_ACCEPTED','REJECTED')),
+  reviewed_value_json JSONB,
+  reviewed_by_user_id TEXT,
+  reviewed_at TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  PRIMARY KEY (tenant_id, field_review_id),
+  UNIQUE (tenant_id, review_session_id, proposal_id),
+  FOREIGN KEY (tenant_id, review_session_id) REFERENCES atlas_ai_review_sessions (tenant_id, review_session_id),
+  FOREIGN KEY (tenant_id, proposal_id, processing_job_id) REFERENCES atlas_ai_field_proposals (tenant_id, proposal_id, processing_job_id),
+  FOREIGN KEY (reviewed_by_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_ai_field_reviews_id CHECK (field_review_id LIKE 'AI-FIELD-REVIEW-________-____-____-____-____________'),
+  CONSTRAINT atlas_ai_field_reviews_decision CHECK ((disposition='PENDING' AND reviewed_by_user_id IS NULL AND reviewed_at IS NULL AND reviewed_value_json IS NULL) OR (disposition='REJECTED' AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL AND reviewed_value_json IS NULL) OR (disposition IN ('ACCEPTED','EDITED_ACCEPTED') AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL AND reviewed_value_json IS NOT NULL))
+);
+CREATE INDEX atlas_ai_field_reviews_session_idx ON atlas_ai_field_reviews (tenant_id, review_session_id, field_key, field_review_id);
+
+CREATE TABLE atlas_ai_review_events (
+  tenant_id TEXT NOT NULL,
+  review_event_id TEXT NOT NULL,
+  review_session_id TEXT NOT NULL,
+  field_review_id TEXT,
+  event_type TEXT NOT NULL CHECK (event_type IN ('SESSION_CREATED','FIELD_ACCEPTED','FIELD_EDITED_ACCEPTED','FIELD_REJECTED','FIELD_RESET','COMMITTED','CANCELLED','STALE_REJECTED')),
+  occurred_at TIMESTAMPTZ NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (tenant_id, review_event_id),
+  FOREIGN KEY (tenant_id, review_session_id) REFERENCES atlas_ai_review_sessions (tenant_id, review_session_id),
+  FOREIGN KEY (tenant_id, field_review_id) REFERENCES atlas_ai_field_reviews (tenant_id, field_review_id),
+  FOREIGN KEY (actor_user_id) REFERENCES atlas_users (user_id),
+  CONSTRAINT atlas_ai_review_events_id CHECK (review_event_id LIKE 'AI-REVIEW-EVT-________-____-____-____-____________')
+);
+CREATE INDEX atlas_ai_review_events_history_idx ON atlas_ai_review_events (tenant_id, review_session_id, occurred_at DESC, review_event_id DESC);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -1225,5 +1302,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0009_crm_activity_follow_up', crmActivityFollowUpSql),
   migration('0010_unified_lead_intake', unifiedLeadIntakeSql),
   migration('0011_contextual_attachments', contextualAttachmentsSql),
-  migration('0012_ai_extraction_provenance', aiExtractionProvenanceSql)
+  migration('0012_ai_extraction_provenance', aiExtractionProvenanceSql),
+  migration('0013_ai_human_review', aiHumanReviewSql)
 ]);

@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import test, { after, before } from 'node:test';
+import pg from 'pg';
+import { createPostgresRuntimeConfig, PostgresRuntime } from '../src/postgres-runtime.js';
+import { FOUNDATION_MIGRATIONS, PostgresMigrationRunner } from '../src/migrations.js';
+
+const ON = process.env.ATLAS_MOS140B2_REAL_POSTGRES === '1';
+const DB = 'atlas_preprod_vitality_mos133h', MU = 'atlas_mos133h_migration', AU = 'atlas_mos133h_application';
+if (!ON) test('MOS-140B-2 real PostgreSQL validation requires explicit disposable opt-in', { skip: true }, () => {});
+else {
+  for (const name of ['MOS133H_MIGRATION_PASSWORD', 'MOS133H_APPLICATION_PASSWORD']) if (!process.env[name]) throw new Error('Protected role handoff unavailable.');
+  const secrets = { getSecret: async (ref) => ref === 'm' ? process.env.MOS133H_MIGRATION_PASSWORD : process.env.MOS133H_APPLICATION_PASSWORD };
+  const base = { environment: 'development', host: 'localhost', port: 5432, database: DB, tls: { required: false } };
+  let migration, app, runner;
+  before(async () => { migration = new PostgresRuntime(await createPostgresRuntimeConfig({ ...base, user: MU, passwordSecretRef: 'm', role: 'MIGRATION' }, { secretProvider: secrets })); app = new PostgresRuntime(await createPostgresRuntimeConfig({ ...base, user: AU, passwordSecretRef: 'a', role: 'APPLICATION' }, { secretProvider: secrets })); runner = new PostgresMigrationRunner({ runtime: migration, migrations: FOUNDATION_MIGRATIONS }); });
+  after(async () => { await app?.close(); await migration?.close(); });
+  test('applies MOS-140B-2 review persistence on PostgreSQL 17 with the migration role', async () => { const identity = (await migration.query("SELECT current_setting('server_version_num')::int version,(SELECT rolsuper FROM pg_roles WHERE rolname=current_user) super", [], 'MOS140B2_ID')).rows[0]; assert.equal(identity.super, false); assert.ok(identity.version >= 170000 && identity.version < 180000); await runner.apply(); assert.deepEqual(await runner.status(), { state: 'CURRENT', ready: true }); assert.equal((await migration.query("SELECT count(*)::int count FROM atlas_schema_migrations WHERE migration_id='0013_ai_human_review'", [], 'MOS140B2_MIG')).rows[0].count, 1); });
+  test('review session, field decision, and event tables and indexes cross the application role boundary', async () => { const tables = new Set((await app.query("SELECT table_name FROM information_schema.tables WHERE table_name IN ('atlas_ai_review_sessions','atlas_ai_field_reviews','atlas_ai_review_events')", [], 'MOS140B2_TABLES')).rows.map((row) => row.table_name)); assert.equal(tables.size, 3); const indexes = new Set((await migration.query("SELECT indexname FROM pg_indexes WHERE schemaname='public' AND indexname LIKE 'atlas_ai_review_%' OR indexname='atlas_ai_field_reviews_session_idx'", [], 'MOS140B2_INDEXES')).rows.map((row) => row.indexname)); for (const name of ['atlas_ai_review_sessions_context_idx', 'atlas_ai_review_sessions_draft_idx', 'atlas_ai_field_reviews_session_idx', 'atlas_ai_review_events_history_idx']) assert.ok(indexes.has(name), name); });
+  test('real foreign keys reject cross-tenant review stitching', async () => { const client = new pg.Client({ host: 'localhost', port: 5432, database: DB, user: MU, password: process.env.MOS133H_MIGRATION_PASSWORD, ssl: false }); await client.connect(); try { await client.query('BEGIN'); await assert.rejects(() => client.query("INSERT INTO atlas_ai_review_sessions(tenant_id,review_session_id,processing_job_id,context_parent_type,context_parent_id,tool_instance_id,base_authoritative_version,source_state_at_open,initiated_by_user_id,initiated_at,idempotency_key_hash) VALUES('TENANT-CROSS','AI-REVIEW-140b2000-0000-4000-8000-000000000001','AI-JOB-140b1000-0000-4000-8000-000000000003','TOOL_INSTANCE','TOOL-140b1000-0000-4000-8000-000000000002','TOOL-140b1000-0000-4000-8000-000000000002',1,'STATIC_TEXT','USER-MOS140B1',NOW(),repeat('a',64))"), (error) => error.code === '23503'); } finally { await client.query('ROLLBACK'); await client.end(); } });
+}
