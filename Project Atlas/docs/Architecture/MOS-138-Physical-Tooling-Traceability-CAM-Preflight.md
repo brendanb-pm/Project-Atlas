@@ -2,7 +2,7 @@
 
 ## Status and boundary
 
-MOS-138 adds the canonical PostgreSQL model, provider/service boundary, deterministic preflight engine, and operator workspace for physical cutting-tool identity and as-built geometry. It does not deploy or cut over production, add CNC/controller integration, generate CAM, or replace the accepted Job, Operation, Traveler projection, QR authority, or Asset identity models.
+MOS-138-R1 closes the operational code gap around the canonical PostgreSQL model, provider/service boundary, deterministic preflight engine, and operator workspace for physical cutting-tool identity and as-built geometry. It does not deploy or cut over production, add CNC/controller integration, generate CAM, or replace the accepted Job, Operation, Traveler projection, QR authority, or Asset identity models.
 
 Production changes: **NONE**.
 
@@ -39,6 +39,20 @@ Nominal and actual geometry never overwrite one another:
 
 Changing or remeasuring a cutter therefore cannot rewrite the explanation of an earlier operation. `REGROUND` and `MODIFIED` transitions mark current verification stale. Precision work requiring verified actual geometry does not become ready until that chain is restored.
 
+### Operational regrind command
+
+`recordRegrind` is the human-first authoritative command for the pilot. In one PostgreSQL transaction it:
+
+1. locks the active Tool Instance at the operator's expected version;
+2. verifies the measurement unit against the catalog Tool Type;
+3. verifies any selected MOS-140A attachment is current evidence for that same Tool Instance;
+4. appends a verified `REGRIND_POST_MEASUREMENT` with the explicit ACTUAL diameter;
+5. appends the condition transition when the cutter first enters `REGROUND`;
+6. advances current condition/measurement/version; and
+7. appends the normal manual-entry audit with the reason, actor, prior measurement, resulting measurement, correlation, and evidence reference.
+
+Repeated regrinds remain distinguishable even when the condition is already `REGROUND`, because every action appends a new verified post-regrind measurement and manual audit event. A stale version, mismatched unit, or attachment belonging to another record rolls back the complete command. Nominal geometry is never part of this update.
+
 ## Assembly and machine lifecycle
 
 Partial unique indexes allow only one active cutter per holder and one active holder assembly per cutter. Removal uses optimistic version checks and preserves the historical assembly. Moving a cutter requires ending its active assembly before installing a new one.
@@ -72,7 +86,9 @@ Identifier issuance accepts an opaque QR/Data Matrix token only through a `TOOLI
 - holder: active assembly and physical cutter state, or explicit `EMPTY`;
 - cutter/container: exact cutter plus active assembly, or explicit `STORED`.
 
-Active-only indexed lookup prevents removed assemblies from appearing current. Tool search and history have validated limits of 1–100 (25 by default). Search uses one joined, tenant-bounded query; setup uses one fixed joined current-state query; history is loaded on demand and bounded. Routine screens do not hydrate all tools or full history.
+Active-only indexed lookup prevents removed assemblies from appearing current. R1 adds actor-attributed identifier issuance/revocation, a versioned lifecycle, and one-active-locator constraints per physical cutter or holder. Assigning a replacement label revokes the former locator transactionally; PostgreSQL retains only hashes, and a scan still requires authenticated `TOOLING_READ` authority.
+
+Tool search and history have validated limits of 1–100 (25 by default). Search has fixed, parameterized paths for condition and exact nominal/ACTUAL diameter plus prefix lookup for Tool ID, description, serial/lot, and storage location. Migration `0014_operational_tooling_closure` adds the supporting search and current-measurement indexes. Setup uses one fixed joined current-state query. History is loaded on demand through one bounded union and now includes actor, reason, measurement method, evidence reference/metadata, manual provenance, assemblies, machine loads, executions, and physical-label lifecycle. Routine screens do not hydrate all tools, attachments, or full history.
 
 ## Authorization and attribution
 
@@ -88,7 +104,9 @@ Creation, measurement, condition, install/remove, machine load/unload, and execu
 
 It emphasizes `ACTUAL` while still displaying `NOMINAL`, condition, holder, assembly, machine/pocket, operation/CAM expectation, radial stock, and explicit reasons. It includes tool search/detail, measurement, assembly, scan/lookup, assignment, preflight, and on-demand history entry points.
 
-Loading, empty, not found, unverified, warning, blocked, stale, unavailable/error, retry, quarantined, and retired semantics are explicit. The UI has programmatic labels, keyboard operation, visible Atlas controls, live status announcements, non-color-only state text, disabled Run on unsafe states, touch-sized controls, responsive breakpoints, and stale-response suppression. Rendered preview states are provided by `tools/ui/tooling-preflight-preview.js` without production data.
+The R1 controls complete the code-level shop loop: a saved Tool Instance can receive an explicit verified post-regrind ACTUAL diameter and reason, optionally linked to a selected contextual attachment; recent evidence and lifecycle history can be retrieved on demand; and an operator can scan an opaque preprinted QR/Data Matrix label to assign or replace its physical locator. Condition changes made through ordinary manual editing now also append the canonical condition history rather than changing only current state.
+
+Loading, empty, not found, unverified, warning, blocked, stale, unavailable/error, retry, quarantined, and retired semantics are explicit. Unknown save outcomes direct the operator to refresh authoritative state/history rather than replaying blindly. The UI has programmatic labels, keyboard operation, visible Atlas controls, live status announcements, non-color-only state text, disabled Run on unsafe states, touch-sized controls, reduced-motion behavior, responsive breakpoints, and independent stale-response suppression for tool, attachment, AI-review, and history reads. Rendered preview states are provided by `tools/ui/tooling-preflight-preview.js` without production data.
 
 ## 8767-00 representation
 
@@ -112,7 +130,7 @@ Real PostgreSQL 17 validation uses the established local disposable `atlas_prepr
 
 ## Deferred follow-on work
 
-- Bind the operator workspace to authenticated PostgreSQL edge routes during the accepted edge/UI activation gate; do not add a Sheets tooling provider.
+- MOS-140C must bind/exercise the operator workspace through authenticated PostgreSQL edge routes in an authorized Vitality/non-production installation and perform real device/label acceptance. The R1 code gate does not claim that live acceptance; do not add a Sheets tooling provider.
 - Add production-specific operational policy ownership, backup/restore rehearsal, and migration authorization before any live cutover.
 - Hardware presetter, CNC controller, automatic compensation, predictive tool life, purchasing/reorder, inventory optimization, CAM generation/post-processing, and autonomous control remain separate stories.
 - Multi-element holders require an explicit future domain decision; MOS-138 deliberately enforces one active cutter per holder.

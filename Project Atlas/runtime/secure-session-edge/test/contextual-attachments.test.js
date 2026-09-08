@@ -79,5 +79,7 @@ test('MOS-138 pilot supports audited direct manual create and optimistic edit wi
   await assert.rejects(()=>tooling.updateToolInstance(context,{toolInstanceId:manualTool,expectedVersion:1,condition:'USED'}),e=>e.code==='CONFLICT');
   const events=(await f.app.query('SELECT event_type,previous_version,new_version FROM atlas_tool_manual_entry_events WHERE tenant_id=$1 AND tool_instance_id=$2 ORDER BY new_version',[CONTEXT.tenantId,manualTool])).rows;
   assert.deepEqual(events.map(x=>x.event_type),['CREATED','UPDATED']);assert.equal(events[1].previous_version,1);assert.equal(events[1].new_version,2);
+  const conditionEvents=(await f.app.query('SELECT previous_condition,next_condition,changed_by_user_id FROM atlas_tool_condition_events WHERE tenant_id=$1 AND tool_instance_id=$2',[CONTEXT.tenantId,manualTool])).rows;
+  assert.deepEqual(conditionEvents,[{previous_condition:'USED',next_condition:'REGROUND',changed_by_user_id:'USER-A'}]);
   await f.app.close();await f.migration.close();
 });

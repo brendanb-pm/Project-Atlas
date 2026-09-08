@@ -113,7 +113,8 @@ test('PostgreSQL adapter uses tenant-bounded fixed SQL, bounded limits and curre
   const search = calls.at(-1);
   assert.match(search.sql, /tenant_id=\$1/);
   assert.match(search.sql, /LIMIT \$3/);
-  assert.deepEqual(search.values, ['TENANT-A', '%end mill%', 25]);
+  assert.deepEqual(search.values, ['TENANT-A', 'end mill%', 25]);
+  assert.match(search.sql, /storage_location/);
   const projection = await repository.getIdentifierProjection({ tenantId: 'TENANT-A' }, { resource_type: 'HOLDER', holder_id: IDS.holder });
   assert.equal(projection.state, 'EMPTY');
   assert.match(calls.at(-1).sql, /status='ACTIVE'/);

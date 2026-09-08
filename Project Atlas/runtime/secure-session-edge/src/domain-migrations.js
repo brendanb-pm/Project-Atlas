@@ -1287,6 +1287,21 @@ CREATE TABLE atlas_ai_review_events (
 CREATE INDEX atlas_ai_review_events_history_idx ON atlas_ai_review_events (tenant_id, review_session_id, occurred_at DESC, review_event_id DESC);
 `;
 
+const operationalToolingClosureSql = `
+ALTER TABLE atlas_tool_identifiers ADD COLUMN issued_by_user_id TEXT;
+ALTER TABLE atlas_tool_identifiers ADD COLUMN revoked_by_user_id TEXT;
+ALTER TABLE atlas_tool_identifiers ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1);
+ALTER TABLE atlas_tool_identifiers ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE atlas_tool_identifiers ADD CONSTRAINT atlas_tool_identifiers_issued_by_fk FOREIGN KEY (issued_by_user_id) REFERENCES atlas_users (user_id);
+ALTER TABLE atlas_tool_identifiers ADD CONSTRAINT atlas_tool_identifiers_revoked_by_fk FOREIGN KEY (revoked_by_user_id) REFERENCES atlas_users (user_id);
+CREATE UNIQUE INDEX atlas_tool_identifiers_active_tool_idx ON atlas_tool_identifiers (tenant_id, tool_instance_id) WHERE status='ACTIVE' AND tool_instance_id IS NOT NULL;
+CREATE UNIQUE INDEX atlas_tool_identifiers_active_holder_idx ON atlas_tool_identifiers (tenant_id, holder_id) WHERE status='ACTIVE' AND holder_id IS NOT NULL;
+CREATE INDEX atlas_tool_types_description_search_idx ON atlas_tool_types (tenant_id, lower(description), tool_type_id) WHERE status='ACTIVE';
+CREATE INDEX atlas_tool_instances_serial_search_idx ON atlas_tool_instances (tenant_id, lower(serial_lot_identifier), tool_instance_id) WHERE status='ACTIVE' AND serial_lot_identifier IS NOT NULL;
+CREATE INDEX atlas_tool_instances_location_search_idx ON atlas_tool_instances (tenant_id, lower(storage_location), tool_instance_id) WHERE status='ACTIVE' AND storage_location IS NOT NULL;
+CREATE INDEX atlas_tool_measurements_diameter_lookup_idx ON atlas_tool_measurements (tenant_id, measured_diameter, tool_instance_id) WHERE verification_status='VERIFIED';
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -1303,5 +1318,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0010_unified_lead_intake', unifiedLeadIntakeSql),
   migration('0011_contextual_attachments', contextualAttachmentsSql),
   migration('0012_ai_extraction_provenance', aiExtractionProvenanceSql),
-  migration('0013_ai_human_review', aiHumanReviewSql)
+  migration('0013_ai_human_review', aiHumanReviewSql),
+  migration('0014_operational_tooling_closure', operationalToolingClosureSql)
 ]);
