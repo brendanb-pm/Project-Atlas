@@ -8,6 +8,8 @@ Canonical standards are maintained only in:
 
 `https://github.com/brendanb-pm/Codex-Standards`
 
+Approved canonical revision: `ce664dfbd36f7522fe8049fdd36230384a8e0e8f`.
+
 Use one shared local read-only checkout for all projects.
 
 Resolve the checkout path in this order:
@@ -18,11 +20,12 @@ Resolve the checkout path in this order:
 At the first substantive task of a session, refresh that checkout once:
 
 - if missing, clone `https://github.com/brendanb-pm/Codex-Standards`;
-- if present and clean, update it with a fast-forward-only pull from `main`;
+- fetch `origin/main` without discarding local state;
+- verify `ce664dfbd36f7522fe8049fdd36230384a8e0e8f^{commit}` resolves and use a read-only checkout or worktree whose `HEAD` is exactly that revision;
 - do not refresh again for every task in the same session;
 - agents must never edit, commit, push, reset, or otherwise mutate the canonical standards repository except for the refresh operation above.
 
-If the checkout is dirty, conflicted, or cannot be safely refreshed, do not reset or discard anything automatically. Report the condition. A previously cached clean checkout may be used only when `Codex-Standards.md` is present; report `STANDARDS SOURCE: CACHED; FRESHNESS: UNVERIFIED`. If no usable checkout exists, stop substantive execution and report `CANONICAL STANDARDS UNAVAILABLE`.
+If the checkout is dirty, conflicted, the approved revision cannot resolve, or the exact revision cannot be read safely, do not reset or discard anything automatically. Report the condition and stop substantive execution with `CANONICAL STANDARDS UNAVAILABLE`.
 
 Load only:
 
