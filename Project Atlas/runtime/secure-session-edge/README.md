@@ -39,6 +39,13 @@ npm install
 npm test
 ```
 
+For the isolated Windows PostgreSQL 17 environment shared only with this Atlas
+runtime, run Nexus's `scripts/dev/Setup-DockerPostgres.ps1 -Phase Provision`.
+It starts the separate `atlas-local` Compose project on loopback, using an
+Atlas-only named volume, network, database credential, and ignored local
+environment file. Ordinary start, stop, restart, and verification do not remove
+the Atlas volume.
+
 Tests use deterministic test-provider adapters. They are not selectable in
 production configuration. They prove the browser-equivalent path:
 
