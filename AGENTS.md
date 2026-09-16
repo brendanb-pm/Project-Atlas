@@ -8,7 +8,7 @@ Canonical standards are maintained only in:
 
 `https://github.com/brendanb-pm/Codex-Standards`
 
-Approved canonical revision: `38d452cf73604bee0db7d7778bd4804ebcbdbdc7`.
+Approved canonical revision: `2951a34c7d660add75ab530fac68ea500d4fc23d`.
 
 Use one shared local read-only checkout for all projects.
 
@@ -21,7 +21,7 @@ At the first substantive task of a session, refresh that checkout once:
 
 - if missing, clone `https://github.com/brendanb-pm/Codex-Standards`;
 - fetch `origin/main` without discarding local state;
-- verify `38d452cf73604bee0db7d7778bd4804ebcbdbdc7^{commit}` resolves and use a read-only checkout or worktree whose `HEAD` is exactly that revision;
+- verify `2951a34c7d660add75ab530fac68ea500d4fc23d^{commit}` resolves and use a read-only checkout or worktree whose `HEAD` is exactly that revision;
 - do not refresh again for every task in the same session;
 - agents must never edit, commit, push, reset, or otherwise mutate the canonical standards repository except for the refresh operation above.
 
@@ -33,6 +33,8 @@ Load only:
 - conditional modules triggered by the task.
 
 Do not copy canonical standards into this repository. Do not load every module by default. Use the core deterministic model/priority policy: select once before execution and do not continue discussing model choice during the run.
+
+After implementation and required integration for a substantive tracked story or sprint, execute `<standards-home>/DELIVERY_CLOSEOUT_PROMPT.md`; do not copy its contents into this repository.
 
 ## Release channel
 
