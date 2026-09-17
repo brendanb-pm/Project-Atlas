@@ -8,7 +8,7 @@ Canonical standards are maintained only in:
 
 `https://github.com/brendanb-pm/Codex-Standards`
 
-Approved canonical revision: `2951a34c7d660add75ab530fac68ea500d4fc23d`.
+Approved canonical revision: `ab404873b649a9b1a53d3a221de23efce7074afc`.
 
 Use one shared local read-only checkout for all projects.
 
@@ -21,7 +21,7 @@ At the first substantive task of a session, refresh that checkout once:
 
 - if missing, clone `https://github.com/brendanb-pm/Codex-Standards`;
 - fetch `origin/main` without discarding local state;
-- verify `2951a34c7d660add75ab530fac68ea500d4fc23d^{commit}` resolves and use a read-only checkout or worktree whose `HEAD` is exactly that revision;
+- verify `ab404873b649a9b1a53d3a221de23efce7074afc^{commit}` resolves and use a read-only checkout or worktree whose `HEAD` is exactly that revision;
 - do not refresh again for every task in the same session;
 - agents must never edit, commit, push, reset, or otherwise mutate the canonical standards repository except for the refresh operation above.
 
