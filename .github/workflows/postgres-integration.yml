@@ -1,0 +1,26 @@
+name: PostgreSQL 17 integration
+
+on:
+  pull_request:
+    paths:
+      - 'Project Atlas/runtime/secure-session-edge/**'
+      - '.github/workflows/postgres-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: Project Atlas/runtime/secure-session-edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run test:postgres
