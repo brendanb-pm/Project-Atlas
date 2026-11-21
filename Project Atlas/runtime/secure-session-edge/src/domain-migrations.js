@@ -1302,6 +1302,21 @@ CREATE INDEX atlas_tool_instances_location_search_idx ON atlas_tool_instances (t
 CREATE INDEX atlas_tool_measurements_diameter_lookup_idx ON atlas_tool_measurements (tenant_id, measured_diameter, tool_instance_id) WHERE verification_status='VERIFIED';
 `;
 
+const authoritativeWorkOrderSql = `
+CREATE TABLE atlas_work_order_revisions (
+  tenant_id TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  approved_by_user_id TEXT NOT NULL REFERENCES atlas_users(user_id),
+  approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  authorization_source TEXT NOT NULL,
+  change_summary TEXT NOT NULL,
+  scope JSONB NOT NULL,
+  PRIMARY KEY (tenant_id, job_id, revision),
+  FOREIGN KEY (tenant_id, job_id) REFERENCES atlas_jobs(tenant_id, job_id)
+);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -1319,5 +1334,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0011_contextual_attachments', contextualAttachmentsSql),
   migration('0012_ai_extraction_provenance', aiExtractionProvenanceSql),
   migration('0013_ai_human_review', aiHumanReviewSql),
-  migration('0014_operational_tooling_closure', operationalToolingClosureSql)
+  migration('0014_operational_tooling_closure', operationalToolingClosureSql),
+  migration('0016_authoritative_work_order', authoritativeWorkOrderSql)
 ]);

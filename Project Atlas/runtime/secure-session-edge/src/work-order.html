@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas Work Orders</title>
+  <script type="module" src="/work-order-client.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Production work orders</h1>
+    <form id="open">
+      <label>Job ID <input name="jobId" maxlength="160" required></label>
+      <button>Open work order</button>
+    </form>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section id="detail" hidden>
+      <h2 id="title"></h2>
+      <p id="readiness"></p>
+      <p id="bin"></p>
+      <dl id="scope"></dl>
+      <h3>Operations</h3>
+      <ul id="operations"></ul>
+      <button id="complete" type="button" hidden>Complete work order</button>
+      <h3>Approval history</h3>
+      <ol id="history"></ol>
+      <button id="older" type="button" hidden>Load older revisions</button>
+      <form id="approve" hidden>
+        <h3>Approve scope</h3>
+        <p><label>Approved services, one per line<br><textarea name="services"></textarea></label></p>
+        <p><label>Finish or coating<br><input name="finish" maxlength="512"></label></p>
+        <p><label>Required operation code for the finish<br><input name="finishOperationCode" maxlength="160"></label></p>
+        <p><label>Customer commitments<br><textarea name="customerCommitments" maxlength="1000"></textarea></label></p>
+        <p><label>Approved price <input name="amount" inputmode="decimal"></label>
+          <label>Currency code <input name="currency" maxlength="3"></label></p>
+        <p><label>Due date and time with UTC offset<br><input name="dueAt" placeholder="YYYY-MM-DDThh:mm:ss±hh:mm"></label></p>
+        <p><label>Special instructions<br><textarea name="specialInstructions" maxlength="1500"></textarea></label></p>
+        <p><label>Handoffs, one per line<br><textarea name="handoffs"></textarea></label></p>
+        <p><label>New operation code <input name="operationCode" maxlength="160"></label></p>
+        <p><label>New operation instructions<br><textarea name="operationInstructions" maxlength="1000"></textarea></label></p>
+        <p><label>Authorization source<br><input name="authorizationSource" maxlength="512" required></label></p>
+        <p><label>Evidence references, one per line<br><textarea name="evidenceReferences"></textarea></label></p>
+        <p><label>What changed?<br><textarea name="changeSummary" maxlength="1000" required></textarea></label></p>
+        <button>Approve revision</button>
+      </form>
+    </section>
+    <section>
+      <h2>Production queue</h2>
+      <ul id="queue"></ul>
+    </section>
+  </main>
+</body>
+</html>
