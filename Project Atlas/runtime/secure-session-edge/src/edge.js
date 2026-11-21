@@ -10,6 +10,7 @@ const FLOW_COOKIE = 'atlas_auth_flow';
 const MAX_BODY = 8192;
 const workOrderPage = readFileSync(new URL('./work-order.html', import.meta.url));
 const workOrderClient = readFileSync(new URL('./work-order-client.js', import.meta.url));
+const workOrderStyles = readFileSync(new URL('./work-order.css', import.meta.url));
 
 export function createEdgeConfig(input = {}) {
   const environment = input.environment || 'preproduction';
@@ -75,7 +76,7 @@ function createHandler(deps) {
       if (request.method === 'POST' && url.pathname === '/auth/logout') return await logout(request, response, deps, requestId);
       if (request.method === 'GET' && url.pathname === '/preproduction/context') return await contextHarness(request, response, deps, requestId);
       if (deps.workOrders && (url.pathname === '/api/work-orders' || url.pathname.startsWith('/api/work-orders/') ||
-          url.pathname === '/work-orders' || url.pathname === '/work-order-client.js')) {
+          url.pathname === '/work-orders' || url.pathname === '/work-order-client.js' || url.pathname === '/work-order.css')) {
         return await workOrderRequest(request, response, deps, url, requestId);
       }
       throw errors.notFound();
@@ -91,7 +92,8 @@ async function workOrderRequest(request, response, deps, url, requestId) {
   const match = /^\/api\/work-orders\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159})(?:\/(history|approve|complete|operations\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159})\/complete))?$/.exec(url.pathname);
   const file = request.method === 'GET' && {
     '/work-orders': [workOrderPage, 'text/html'],
-    '/work-order-client.js': [workOrderClient, 'text/javascript']
+    '/work-order-client.js': [workOrderClient, 'text/javascript'],
+    '/work-order.css': [workOrderStyles, 'text/css']
   }[url.pathname];
   const queue = request.method === 'GET' && url.pathname === '/api/work-orders';
   const action = match?.[2];

@@ -67,7 +67,9 @@ function scopeDetails(scope) {
 function renderScope(target, scope) {
   target.replaceChildren();
   for (const [label, value] of Object.entries(scopeDetails(scope))) {
-    target.append(element('dt', label), element('dd', value || '—'));
+    const pair = element('div', '');
+    pair.append(element('dt', label), element('dd', value || '—'));
+    target.append(pair);
   }
 }
 

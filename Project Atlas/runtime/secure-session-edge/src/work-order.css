@@ -1,0 +1,79 @@
+:root {
+  color: #182536;
+  background: #f4f7fa;
+  font: 100%/1.5 system-ui, sans-serif;
+}
+
+body { margin: 0; }
+
+main {
+  max-width: 68rem;
+  margin-inline: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  overflow-wrap: anywhere;
+}
+
+section {
+  margin-block: 1rem;
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid #cbd5df;
+  border-radius: .75rem;
+  background: white;
+}
+
+h1, h2, h3 { line-height: 1.2; }
+h1, section > h2:first-child { margin-top: 0; }
+
+#readiness {
+  border-inline-start: .25rem solid #496784;
+  background: #eef4fa;
+  padding: .75rem 1rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: .25rem 1rem;
+}
+
+dl > div { padding-block: .35rem; }
+dt { font-weight: 650; }
+dd { margin: 0; }
+
+label { display: block; font-weight: 600; }
+input, textarea, button { font: inherit; }
+
+input, textarea {
+  box-sizing: border-box;
+  display: block;
+  width: min(100%, 32rem);
+  min-height: 2.75rem;
+  margin-block: .25rem;
+  padding: .4rem .6rem;
+  border: 1px solid #8193a7;
+  border-radius: .35rem;
+}
+
+textarea { resize: vertical; }
+
+button {
+  min-height: 2.75rem;
+  padding: .4rem .75rem;
+  border: 1px solid #254762;
+  border-radius: .35rem;
+  color: white;
+  background: #254762;
+  cursor: pointer;
+}
+
+button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: .2rem solid #2371ba;
+  outline-offset: .15rem;
+}
+
+#open, .price { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+#open label { flex: 0 1 20rem; }
+#open input { margin-bottom: 0; }
+#history summary { cursor: pointer; }
+#queue li, #operations li { margin-block: .5rem; }
+#message:empty { display: none; }
