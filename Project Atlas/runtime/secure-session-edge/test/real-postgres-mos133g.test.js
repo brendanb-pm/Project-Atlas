@@ -13,6 +13,8 @@ import { PostgresWorkOrderRepository, WorkOrderService } from '../src/work-order
 import { PostgresWipBinRepository } from '../src/wip-bin-tracking.js';
 import { createHttpServer, createTenantEdge } from '../src/edge.js';
 import { AtlasAuthority } from '../src/authority.js';
+import { ToolingProtectedApi } from '../src/tooling-api.js';
+import { PostgresToolingRepository, ToolingTraceabilityService } from '../src/tooling-traceability.js';
 
 const ENABLED = process.env.ATLAS_MOS133G_REAL_POSTGRES === '1';
 const DATABASE = 'atlas_preprod_mos133g';
@@ -150,14 +152,43 @@ if (!ENABLED) {
   test('migration and application roles connect independently', async () => { assert.equal((await migrationRuntime.query('SELECT current_user AS role', [], 'MOS133G_MIGRATION_CONNECT')).rows[0].role, MIGRATION_USER); assert.equal((await applicationRuntime.query('SELECT current_user AS role', [], 'MOS133G_APPLICATION_CONNECT')).rows[0].role, APPLICATION_USER); });
   test('application role cannot create schema objects', async () => { await raw(APPLICATION_USER, applicationPassword, (client) => expectSqlState(() => client.query('CREATE TABLE mos133g_forbidden_table(id int)'), '42501')); });
   test('D-A classifies the real empty database without mutating it', async () => { const value = await readiness.inspect(); assert.equal(value.state, 'INITIALIZATION_REQUIRED'); assert.equal(value.remediationCode, 'ATLAS_SCHEMA_UNINITIALIZED'); assert.equal((await admin.query("SELECT count(*)::int AS count FROM information_schema.tables WHERE table_schema='public'")).rows[0].count, 0); });
-  test('accepted migrations apply in order and MOS-141 preserves an existing job and operation', async () => {
-    const previous = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: FOUNDATION_MIGRATIONS.slice(0, -1) });
+  test('upgrade from 0014 preserves Job, operation, WIP, tenant, identity and session data', async () => {
+    const previous = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: FOUNDATION_MIGRATIONS.slice(0, -2) });
     assert.deepEqual(await previous.apply(), { state: 'CURRENT', ready: true });
     await migrationRuntime.query(`INSERT INTO atlas_installation(installation_id,tenant_id) VALUES('INSTALL-LEGACY-141','TENANT-LEGACY-141')`);
     await migrationRuntime.query(`INSERT INTO atlas_jobs(tenant_id,job_id,work_classification,internal_work_type,title)
       VALUES('TENANT-LEGACY-141','JOB-LEGACY-141','INTERNAL','FIXTURE_TOOLING','Retained')`);
     await migrationRuntime.query(`INSERT INTO atlas_job_operations(tenant_id,job_id,job_operation_id,sequence_number,operation_code)
       VALUES('TENANT-LEGACY-141','JOB-LEGACY-141','LEGACY-OP',1,'INSPECT')`);
+    await migrationRuntime.query("INSERT INTO atlas_users(user_id,display_name) VALUES ('USER-LEGACY-141','Legacy operator')");
+    await migrationRuntime.query(`INSERT INTO atlas_tenant_memberships(tenant_id,membership_id,user_id)
+      VALUES ('TENANT-LEGACY-141','MEMBER-LEGACY-141','USER-LEGACY-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_external_identities(external_identity_id,user_id,provider,issuer,subject)
+      VALUES ('IDENTITY-LEGACY-141','USER-LEGACY-141','GOOGLE','https://issuer.example','legacy-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_wip_bins(tenant_id,wip_bin_id,bin_label,current_location,created_by_user_id)
+      VALUES ('TENANT-LEGACY-141','WIP-BIN-14100000-0000-4000-8000-000000000099','LEGACY','RECEIVING','USER-LEGACY-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_wip_bin_assignments
+      (tenant_id,wip_bin_assignment_id,wip_bin_id,job_id,assigned_at,assigned_by_user_id,correlation_id)
+      VALUES ('TENANT-LEGACY-141','WIP-ASGN-14100000-0000-4000-8000-000000000099',
+      'WIP-BIN-14100000-0000-4000-8000-000000000099','JOB-LEGACY-141',NOW(),'USER-LEGACY-141','LEGACY-141')`);
+    const legacyStore = new PostgresSessionStore({ runtime: migrationRuntime });
+    const legacySession = await legacyStore.create(session('SESSION-LEGACY-141', 'legacy-fixture', {
+      userId: 'USER-LEGACY-141', permittedTenants: ['TENANT-LEGACY-141'], activeTenant: 'TENANT-LEGACY-141'
+    }));
+    const snapshotSql = `SELECT to_jsonb(j) AS job,to_jsonb(o) AS operation,to_jsonb(i) AS installation,
+      to_jsonb(b) AS bin,to_jsonb(a) AS assignment,to_jsonb(m) AS membership,to_jsonb(e) AS identity
+      FROM atlas_jobs j JOIN atlas_job_operations o USING (tenant_id,job_id)
+      JOIN atlas_installation i USING (tenant_id)
+      JOIN atlas_wip_bin_assignments a USING (tenant_id,job_id)
+      JOIN atlas_wip_bins b USING (tenant_id,wip_bin_id)
+      JOIN atlas_tenant_memberships m USING (tenant_id)
+      JOIN atlas_external_identities e ON e.user_id=m.user_id
+      WHERE j.tenant_id='TENANT-LEGACY-141'`;
+    const snapshot = (await migrationRuntime.query(snapshotSql)).rows;
+    assert.equal(snapshot.length, 1);
+    const intermediate = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: FOUNDATION_MIGRATIONS.slice(0, -1) });
+    assert.deepEqual(await intermediate.apply(), { state: 'CURRENT', ready: true });
+    assert.deepEqual(await migrations.status(), { state: 'UPGRADE_REQUIRED', ready: false });
     const result = await time('schemaMigration', () => migrations.apply());
     assert.deepEqual(result, { state: 'CURRENT', ready: true });
     const rows = (await migrationRuntime.query('SELECT migration_id,status FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_ORDER')).rows;
@@ -167,11 +198,34 @@ if (!ENABLED) {
       JOIN atlas_job_operations o USING (tenant_id,job_id) WHERE j.tenant_id='TENANT-LEGACY-141'`)).rows,
     [{ title: 'Retained', version: 1, operation_code: 'INSPECT' }]);
     assert.equal((await migrationRuntime.query('SELECT count(*)::int AS count FROM atlas_work_order_revisions')).rows[0].count, 0);
+    assert.deepEqual((await migrationRuntime.query(snapshotSql)).rows, snapshot);
+    assert.deepEqual(await legacyStore.getByOpaque('legacy-fixture'), legacySession);
+    await migrationRuntime.query("DELETE FROM atlas_auth_sessions WHERE session_id='SESSION-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_external_identities WHERE external_identity_id='IDENTITY-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_tenant_memberships WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_wip_bin_assignments WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_wip_bins WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_users WHERE user_id='USER-LEGACY-141'");
     await migrationRuntime.query("DELETE FROM atlas_job_operations WHERE tenant_id='TENANT-LEGACY-141'");
     await migrationRuntime.query("DELETE FROM atlas_jobs WHERE tenant_id='TENANT-LEGACY-141'");
     await migrationRuntime.query("DELETE FROM atlas_installation WHERE tenant_id='TENANT-LEGACY-141'");
   });
   test('application grants exclude installation and migration metadata writes', async () => { await grantApplicationRuntimePrivileges(); await raw(APPLICATION_USER, applicationPassword, async (client) => { await expectSqlState(() => client.query("UPDATE atlas_schema_migrations SET status='FAILED'"), '42501'); await expectSqlState(() => client.query("UPDATE atlas_installation SET tenant_id='BAD'"), '42501'); }); });
+  test('combined migration chain initializes an empty PostgreSQL 17 database in one run', async () => {
+    const database = qid('atlas_combined_' + randomBytes(6).toString('hex'));
+    await bootstrap.query(`CREATE DATABASE ${database} OWNER ${qid(MIGRATION_USER)}`);
+    const runtime = new PostgresRuntime({ ...migrationConfig, database: database.slice(1, -1) });
+    try {
+      const runner = new PostgresMigrationRunner({ runtime });
+      assert.deepEqual(await runner.apply(), { state: 'CURRENT', ready: true });
+      const result = await runtime.query(`SELECT to_regclass('atlas_auth_attempts')::text AS attempts,
+        to_regclass('atlas_work_order_revisions')::text AS revisions`);
+      assert.deepEqual(result.rows, [{ attempts: 'atlas_auth_attempts', revisions: 'atlas_work_order_revisions' }]);
+    } finally {
+      await runtime.close();
+      await bootstrap.query(`DROP DATABASE ${database}`);
+    }
+  });
   test('migration rerun is already-applied and idempotent', async () => { const beforeRows = (await migrationRuntime.query('SELECT migration_id,applied_at FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_BEFORE')).rows; const result = await migrations.apply(); const afterRows = (await migrationRuntime.query('SELECT migration_id,applied_at FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_AFTER')).rows; assert.deepEqual(result, { state: 'CURRENT', ready: true }); assert.deepEqual(afterRows, beforeRows); });
   test('checksum verification passes for accepted migrations', async () => assert.deepEqual(await migrations.status(), { state: 'CURRENT', ready: true }));
   test('checksum mismatch fails closed without changing metadata', async () => { const altered = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: [{ ...FOUNDATION_MIGRATIONS[0], checksum: 'deliberate-mos133g-mismatch' }, ...FOUNDATION_MIGRATIONS.slice(1)] }); assert.deepEqual(await altered.status(), { state: 'CHECKSUM_MISMATCH', ready: false }); await assert.rejects(() => altered.apply(), (error) => error.code === 'SCHEMA_INCOMPATIBLE'); assert.deepEqual(await migrations.status(), { state: 'CURRENT', ready: true }); });
@@ -342,11 +396,14 @@ if (!ENABLED) {
     const authority = new AtlasAuthority({
       users: [{ id: operator.userId, status: 'ACTIVE' }],
       memberships: [{ userId: operator.userId, tenantId: TENANT, status: 'ACTIVE',
-        capabilities: [...operator.capabilities, 'CORE_RECORD_READ'] }]
+        capabilities: [...operator.capabilities, 'CORE_RECORD_READ', 'TOOLING_READ'] }]
+    });
+    const protectedApi = new ToolingProtectedApi({
+      tooling: new ToolingTraceabilityService({ repository: new PostgresToolingRepository({ runtime: applicationRuntime }) })
     });
     const edge = createTenantEdge({
       config: { environment: 'preproduction', origin, sessionStoreKind: 'postgresql' },
-      providers: {}, authority, sessionStore, workOrderRuntime: applicationRuntime
+      providers: {}, authority, sessionStore, protectedApi, workOrderRuntime: applicationRuntime
     });
     const session = await edge.sessions.create({ userId: operator.userId, provider: 'GOOGLE', issuer: 'https://fixture.invalid',
       subject: 'fixture-141', permittedTenants: [TENANT], activeTenant: TENANT });
@@ -359,6 +416,8 @@ if (!ENABLED) {
       const page = await fetch(base + '/work-orders', { headers: cookies });
       assert.equal(page.status, 200);
       assert.match(await page.text(), /Production work orders/);
+      assert.equal((await fetch(base + '/api/tooling/tools', { headers: cookies })).status, 200);
+      assert.equal((await fetch(base + '/api/work-orders', { headers: cookies })).status, 200);
       const record = await fetch(base + '/api/work-orders/' + jobId, {
         headers: { ...cookies, 'x-atlas-tenant': 'FORGED', 'x-atlas-user': 'FORGED' }
       });

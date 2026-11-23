@@ -14,7 +14,7 @@ Scope revisions accept the complete approved metadata and append required operat
 
 ## Migration and rollback
 
-Migration `0016_authoritative_work_order` is additive. `0015` is reserved by the separate MOS-140C work. Existing Jobs, operation histories, statuses, and WIP links are preserved. Existing scope needs an explicit initial approval before it enters the approved queue. No backfill infers approval from prior job status.
+Migration `0016_authoritative_work_order` is additive and follows MOS-140C migration `0015_authenticated_tenant_runtime`. Existing Jobs, operation histories, statuses, and WIP links are preserved. Existing scope needs an explicit initial approval before it enters the approved queue. No backfill infers approval from prior job status.
 
 Grant the application role SELECT and INSERT on the revision table. Existing Job and operation write grants serve the transactional projection. Approval uses the current tenant context supplied by the established edge authority. The route stays unavailable until the host supplies the application runtime.
 
