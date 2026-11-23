@@ -33,7 +33,7 @@ export class SlidingRateLimiter {
   }
 }
 
-export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
+export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, protectedApi = null, readiness = null, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
   const config = createEdgeConfig(rawConfig);
   if (!authority || !providers) throw new Error('Secure-session edge dependencies are required.');
   if (config.production && Object.values(providers).some((provider) => provider?.isTestAdapter === true)) throw new Error('Test providers cannot be selected in production.');
@@ -43,7 +43,7 @@ export function createTenantEdge({ config: rawConfig, providers, authority, sess
   const actualAttemptStore = attemptStore || new PreproductionAuthAttemptStore({ clock, enabled: !config.production || config.sessionStoreKind === 'postgresql' });
   const sessions = new SessionService({ store: actualSessionStore, clock, policy: config.policy });
   const rateLimiter = limiter || new SlidingRateLimiter({ clock, policy: config.rateLimit });
-  return { config, providers, authority, sessions, attempts: actualAttemptStore, audit, clock, rateLimiter, handler: createHandler({ config, providers, authority, sessions, attempts: actualAttemptStore, audit, clock, rateLimiter }) };
+  return { config, providers, authority, sessions, attempts: actualAttemptStore, protectedApi, readiness, audit, clock, rateLimiter, handler: createHandler({ config, providers, authority, sessions, attempts: actualAttemptStore, protectedApi, readiness, audit, clock, rateLimiter }) };
 }
 
 // Compatibility name retained for 1B tests and explicitly preproduction callers.
@@ -57,12 +57,14 @@ function createHandler(deps) {
     try {
       setHeaders(response, deps.config); if (request.method === 'OPTIONS') throw errors.notFound();
       if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { status: 'ok' });
+      if (request.method === 'GET' && url.pathname === '/ready') return await ready(response, deps);
       if (request.method === 'GET' && url.pathname === '/auth/providers') return sendJson(response, 200, { providers: Object.values(deps.config.providers).filter((item) => item.enabled).map((item) => ({ id: item.id, label: item.id === 'MICROSOFT' ? 'Continue with Microsoft' : 'Continue with Google' })) });
       if (request.method === 'POST' && url.pathname === '/auth/start') return await begin(request, response, deps, requestId);
       if (request.method === 'GET' && url.pathname === '/auth/callback') return await callback(request, response, deps, url, requestId);
       if (request.method === 'GET' && url.pathname === '/session/status') return await status(request, response, deps, requestId);
       if (request.method === 'POST' && url.pathname === '/auth/tenant-select') return await selectTenant(request, response, deps, requestId);
       if (request.method === 'POST' && url.pathname === '/auth/logout') return await logout(request, response, deps, requestId);
+      if (url.pathname.startsWith('/api/')) return await protectedRequest(request, response, deps, url, requestId);
       if (request.method === 'GET' && url.pathname === '/preproduction/context') return await contextHarness(request, response, deps, requestId);
       throw errors.notFound();
     } catch (error) {
@@ -91,11 +93,11 @@ async function callback(request, response, deps, url, requestId) {
   const provider = deps.providers[attempt.provider]; if (!provider) throw errors.providerUnavailable();
   let principal;
   try { principal = await provider.complete({ code, attempt }); } catch (error) { await audit(deps, requestId, 'LOGIN_FAILURE', error.code || 'INVALID_CALLBACK', { provider: attempt.provider }); throw error; }
-  const identity = deps.authority.resolveIdentity(principal.provider, principal.issuer, principal.subject);
-  const user = identity && deps.authority.resolveUser(identity.userId);
+  const identity = await deps.authority.resolveIdentity(principal.provider, principal.issuer, principal.subject);
+  const user = identity && await deps.authority.resolveUser(identity.userId);
   if (!identity || !user || user.status !== 'ACTIVE') { await audit(deps, requestId, 'LOGIN_FAILURE', 'IDENTITY_NOT_PROVISIONED', { provider: attempt.provider }); return sendJson(response, 403, { state: 'ACCESS_UNAVAILABLE', message: 'Access is unavailable.', correlationId: requestId }); }
   let permitted;
-  try { permitted = deps.authority.permittedTenants(user.id); } catch { throw errors.entitlementUnavailable(); }
+  try { permitted = await deps.authority.permittedTenants(user.id); } catch { throw errors.entitlementUnavailable(); }
   if (!permitted.length) { await audit(deps, requestId, 'LOGIN_FAILURE', 'NO_PERMITTED_TENANT', { provider: attempt.provider }); return sendJson(response, 403, { state: 'ACCESS_UNAVAILABLE', message: 'Access is unavailable.', correlationId: requestId }); }
   const activeTenant = permitted.length === 1 ? permitted[0] : '';
   const created = await deps.sessions.create({ userId: user.id, provider: principal.provider, issuer: principal.issuer, subject: principal.subject, permittedTenants: permitted, activeTenant, authenticatedAt: principal.authenticatedAt, authenticationContext: principal.authenticationContext });
@@ -105,7 +107,7 @@ async function callback(request, response, deps, url, requestId) {
 }
 
 async function status(request, response, deps, requestId) {
-  const record = await resolveSession(request, deps); const context = authorize(deps, record, 'SESSION_STATUS', 'CORE_RECORD_READ'); await deps.sessions.touch(record);
+  const record = await resolveSession(request, deps); const context = await authorize(deps, record, 'SESSION_STATUS', 'CORE_RECORD_READ'); await deps.sessions.touch(record);
   const csrf = await deps.sessions.rotateCsrf(record); await audit(deps, requestId, 'SESSION_STATUS', 'AUTHORIZED', { session: record.id });
   return sendJson(response, 200, { state: 'AUTHENTICATED', activeTenant: context.tenantId, csrfToken: csrf, correlationId: requestId });
 }
@@ -113,7 +115,7 @@ async function status(request, response, deps, requestId) {
 async function selectTenant(request, response, deps, requestId) {
   requireOrigin(request, deps.config); const record = await resolveSession(request, deps, true), body = await jsonBody(request); await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);
   const tenantId = String(body.tenantId || ''); if (!validTenant(tenantId) || !record.permittedTenants.includes(tenantId)) { await audit(deps, requestId, 'TENANT_SWITCH_REJECTED', 'FORBIDDEN_TENANT', { session: record.id }); throw errors.forbidden(); }
-  try { authorize(deps, { ...record, activeTenant: tenantId }, 'TENANT_SWITCH', 'CORE_RECORD_READ'); } catch (error) { await audit(deps, requestId, 'TENANT_SWITCH_REJECTED', error.code || 'ACCESS_UNAVAILABLE', { session: record.id }); throw error; }
+  try { await authorize(deps, { ...record, activeTenant: tenantId }, 'TENANT_SWITCH', 'CORE_RECORD_READ'); } catch (error) { await audit(deps, requestId, 'TENANT_SWITCH_REJECTED', error.code || 'ACCESS_UNAVAILABLE', { session: record.id }); throw error; }
   const rotated = await deps.sessions.rotate(record, tenantId); response.setHeader('Set-Cookie', cookie(SESSION_COOKIE, rotated.opaque, { secure: deps.config.production, maxAge: deps.config.policy.absoluteSeconds }));
   await audit(deps, requestId, 'TENANT_SWITCHED', 'ROTATED', { session: rotated.record.id }); return sendJson(response, 200, { state: 'AUTHENTICATED', activeTenant: tenantId, csrfToken: rotated.csrf, correlationId: requestId });
 }
@@ -125,12 +127,36 @@ async function logout(request, response, deps, requestId) {
 
 async function contextHarness(request, response, deps, requestId) {
   if (!deps.config.preproductionTestHarness || deps.config.production) throw errors.notFound();
-  const record = await resolveSession(request, deps), context = authorize(deps, record, 'PREPRODUCTION_CONTEXT', 'CORE_RECORD_READ'); await deps.sessions.touch(record);
+  const record = await resolveSession(request, deps), context = await authorize(deps, record, 'PREPRODUCTION_CONTEXT', 'CORE_RECORD_READ'); await deps.sessions.touch(record);
   return sendJson(response, 200, { state: 'AUTHORIZED', activeTenant: context.tenantId, authenticatedUser: context.userId, correlationId: requestId });
 }
 
-function authorize(deps, record, operation, requiredCapability) {
+async function protectedRequest(request, response, deps, url, requestId) {
+  if (!deps.protectedApi?.match) throw errors.notFound();
+  const descriptor = deps.protectedApi.match(request.method, url);
+  if (!descriptor) throw errors.notFound();
+  deps.rateLimiter.consume(`api:${remoteKey(request)}`);
+  const record = await resolveSession(request, deps);
+  if (descriptor.mutation) {
+    requireOrigin(request, deps.config);
+    await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);
+  }
+  const authorized = await authorize(deps, record, descriptor.operation, descriptor.capability);
+  const context = Object.freeze({ ...authorized, correlationId: requestId, authenticatedAt: record.authenticatedAt, sessionReference: record.id });
+  const input = descriptor.binary ? await binaryBody(request, descriptor.maxBytes) : descriptor.body === false ? {} : await jsonBody(request);
+  const data = await descriptor.execute(context, input, url, request);
+  await deps.sessions.touch(record);
+  await audit(deps, requestId, descriptor.operation, 'AUTHORIZED', { session: record.id, tenantId: context.tenantId, actorUserId: context.userId });
+  return sendJson(response, descriptor.status || 200, { state: 'LOADED', data, correlationId: requestId });
+}
+
+async function authorize(deps, record, operation, requiredCapability) {
   return deps.authority.authorize({ userId: record.userId, tenantId: record.activeTenant, operation, requiredCapability });
+}
+async function ready(response, deps) {
+  if (!deps.readiness?.readiness) return sendJson(response, 503, { status: 'NOT_READY', reason: 'DEPENDENCY_UNAVAILABLE' });
+  const result = await deps.readiness.readiness();
+  return sendJson(response, result.status === 'READY' ? 200 : 503, result.status === 'READY' ? { status: 'READY' } : { status: 'NOT_READY', reason: 'DEPENDENCY_UNAVAILABLE' });
 }
 async function resolveSession(request, deps, allowPending = false) { return deps.sessions.resolve(parseCookies(request.headers.cookie)[SESSION_COOKIE] || '', { allowPending }); }
 function requireOrigin(request, config) { const origin = request.headers.origin || request.headers.referer?.replace(/^(https:\/\/[^/]+).*$/, '$1'); if (origin !== config.origin) throw errors.csrf(); }
@@ -139,12 +165,19 @@ function remoteKey(request) { return String(request.socket.remoteAddress || 'unk
 function clearSession(response, config) { response.setHeader('Set-Cookie', cookie(SESSION_COOKIE, '', { secure: config.production, maxAge: 0 })); }
 function setHeaders(response, config) { for (const [key, value] of Object.entries(securityHeaders(config))) response.setHeader(key, value); }
 function sendJson(response, status, value) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)); }
-function stateFor(code) { return ({ UNAUTHENTICATED: 'SIGNED_OUT', SESSION_EXPIRED: 'SESSION_EXPIRED', SESSION_REVOKED: 'SESSION_EXPIRED', INVALID_CSRF: 'AUTHENTICATION_FAILED', PROVIDER_UNAVAILABLE: 'PROVIDER_TEMPORARILY_UNAVAILABLE', ENTITLEMENT_UNAVAILABLE: 'ACCESS_UNAVAILABLE' }[code] || 'AUTHENTICATION_FAILED'); }
+function stateFor(code) { return ({ UNAUTHENTICATED: 'SIGNED_OUT', SESSION_EXPIRED: 'SESSION_EXPIRED', SESSION_REVOKED: 'SESSION_EXPIRED', INVALID_CSRF: 'AUTHENTICATION_FAILED', PROVIDER_UNAVAILABLE: 'PROVIDER_TEMPORARILY_UNAVAILABLE', ENTITLEMENT_UNAVAILABLE: 'ACCESS_UNAVAILABLE', PERSISTENCE_UNAVAILABLE: 'SOURCE_UNAVAILABLE', SCHEMA_INCOMPATIBLE: 'ACCESS_UNAVAILABLE', FORBIDDEN: 'ACCESS_UNAVAILABLE', NOT_FOUND: 'UNSUPPORTED_ROUTE', CONFLICT: 'ACTIONABLE_ERROR', INVALID_REQUEST: 'ACTIONABLE_ERROR' }[code] || 'ACTIONABLE_ERROR'); }
 async function jsonBody(request) {
   const chunks = []; let size = 0;
   for await (const chunk of request) { size += chunk.length; if (size > MAX_BODY) throw errors.invalidInput(); chunks.push(chunk); }
   if (!chunks.length) return {}; try { const value = JSON.parse(Buffer.concat(chunks).toString('utf8')); if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error(); return value; } catch { throw errors.invalidInput(); }
 }
+async function binaryBody(request, maximum = 50 * 1024 * 1024) {
+  const length = Number(request.headers['content-length']);
+  if (Number.isFinite(length) && (length < 0 || length > maximum)) throw errors.invalidInput();
+  const chunks = []; let size = 0;
+  for await (const chunk of request) { size += chunk.length; if (size > maximum) throw errors.invalidInput(); chunks.push(chunk); }
+  return Buffer.concat(chunks);
+}
 async function audit(deps, correlationId, operation, outcome, extra = {}) {
-  await deps.audit.write({ occurredAt: deps.clock().toISOString(), correlationId, operation, outcome, provider: extra.provider || '', sessionReference: extra.session ? hash(extra.session).slice(0, 16) : '' });
+  try { await deps.audit.write({ occurredAt: deps.clock().toISOString(), correlationId, operation, outcome, provider: extra.provider || '', tenantId: extra.tenantId || null, actorUserId: extra.actorUserId || null, sessionReference: extra.session ? hash(extra.session).slice(0, 16) : '' }); } catch { /* audit dependency failure must not leak or replace the original safe response */ }
 }

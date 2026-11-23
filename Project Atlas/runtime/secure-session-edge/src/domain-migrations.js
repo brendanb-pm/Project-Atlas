@@ -1302,6 +1302,22 @@ CREATE INDEX atlas_tool_instances_location_search_idx ON atlas_tool_instances (t
 CREATE INDEX atlas_tool_measurements_diameter_lookup_idx ON atlas_tool_measurements (tenant_id, measured_diameter, tool_instance_id) WHERE verification_status='VERIFIED';
 `;
 
+const authenticatedTenantRuntimeSql = `
+CREATE TABLE atlas_auth_attempts (
+  attempt_id TEXT PRIMARY KEY,
+  state_hash TEXT NOT NULL UNIQUE,
+  browser_binding_hash TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('GOOGLE','MICROSOFT')),
+  intended_route TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  pkce_verifier TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ
+);
+CREATE INDEX atlas_auth_attempts_expiry_idx ON atlas_auth_attempts (expires_at, attempt_id);
+`;
+
 function migration(id, sql) {
   return Object.freeze({ id, sql, checksum: createHash('sha256').update(sql).digest('hex') });
 }
@@ -1319,5 +1335,6 @@ export const DOMAIN_MIGRATIONS = Object.freeze([
   migration('0011_contextual_attachments', contextualAttachmentsSql),
   migration('0012_ai_extraction_provenance', aiExtractionProvenanceSql),
   migration('0013_ai_human_review', aiHumanReviewSql),
-  migration('0014_operational_tooling_closure', operationalToolingClosureSql)
+  migration('0014_operational_tooling_closure', operationalToolingClosureSql),
+  migration('0015_authenticated_tenant_runtime', authenticatedTenantRuntimeSql)
 ]);

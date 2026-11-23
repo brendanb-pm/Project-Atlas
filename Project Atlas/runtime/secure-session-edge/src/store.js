@@ -65,6 +65,36 @@ export class PreproductionAuthAttemptStore {
   }
 }
 
+/** Durable, single-use OIDC transaction store. State and browser binding are
+ * hashed; nonce and PKCE verifier never leave the tenant database/runtime. */
+export class PostgresAuthAttemptStore {
+  constructor({ runtime, clock = () => new Date() } = {}) {
+    if (!runtime?.query || !runtime?.withTransaction) throw new Error('PostgreSQL auth-attempt store requires a runtime.');
+    this.runtime = runtime; this.clock = clock; this.isDurablePostgresStore = true;
+  }
+  async create({ provider, route, browserBinding, timeoutSeconds }) {
+    const state = randomOpaque(32), nonce = randomOpaque(32), verifier = randomOpaque(48), now = this.clock();
+    const expiresAt = new Date(now.getTime() + timeoutSeconds * 1000).toISOString();
+    await this.runtime.query('INSERT INTO atlas_auth_attempts(attempt_id,state_hash,browser_binding_hash,provider,intended_route,nonce,pkce_verifier,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)', [`attempt-${randomOpaque(18)}`, hash(state), hash(browserBinding), provider, route, nonce, verifier, now.toISOString(), expiresAt], 'AUTH_ATTEMPT_CREATE');
+    return { state, nonce, verifier, provider, route, expiresAt };
+  }
+  async consume({ state, browserBinding }) {
+    return this.runtime.withTransaction('AUTH_ATTEMPT_CONSUME', async (tx) => {
+      const stateHash = hash(state);
+      const row = (await tx.query('SELECT * FROM atlas_auth_attempts WHERE state_hash=$1 FOR UPDATE', [stateHash], 'AUTH_ATTEMPT_LOOKUP')).rows[0];
+      if (!row || row.consumed_at || !equalsHash(browserBinding, row.browser_binding_hash) || new Date(row.expires_at).getTime() <= this.clock().getTime()) throw errors.invalidCallback();
+      const consumed = (await tx.query('UPDATE atlas_auth_attempts SET consumed_at=$2 WHERE state_hash=$1 AND consumed_at IS NULL RETURNING *', [stateHash, this.clock().toISOString()], 'AUTH_ATTEMPT_CONSUME')).rows[0];
+      if (!consumed) throw errors.invalidCallback();
+      return { id: consumed.attempt_id, stateHash: consumed.state_hash, nonce: consumed.nonce, verifier: consumed.pkce_verifier, provider: consumed.provider, route: consumed.intended_route, createdAt: consumed.created_at, expiresAt: consumed.expires_at, consumedAt: consumed.consumed_at };
+    });
+  }
+  async cleanup({ limit = 100 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw errors.invalidInput();
+    const result = await this.runtime.query("WITH doomed AS (SELECT attempt_id FROM atlas_auth_attempts WHERE expires_at<=NOW() OR consumed_at IS NOT NULL ORDER BY expires_at ASC LIMIT $1) DELETE FROM atlas_auth_attempts WHERE attempt_id IN (SELECT attempt_id FROM doomed) RETURNING attempt_id", [limit], 'AUTH_ATTEMPT_CLEANUP');
+    return result.rowCount;
+  }
+}
+
 export class SessionService {
   constructor({ store, clock = () => new Date(), policy }) { this.store = store; this.clock = clock; this.policy = policy; }
   async create({ userId, provider, issuer, subject, permittedTenants, activeTenant = '', authenticatedAt, authenticationContext = 'OIDC' }) {

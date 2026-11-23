@@ -1,0 +1,23 @@
+{
+  "origin": "https://atlas-acceptance.example.com",
+  "database": {
+    "name": "atlas_mos140c_acceptance",
+    "host": "dedicated-postgres.example.com",
+    "port": 5432
+  },
+  "oidc": {
+    "id": "GOOGLE",
+    "clientId": "replace-with-dedicated-oidc-client-id",
+    "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+    "tokenEndpoint": "https://oauth2.googleapis.com/token",
+    "jwksUri": "https://www.googleapis.com/oauth2/v3/certs",
+    "issuers": ["https://accounts.google.com"]
+  },
+  "storageBucket": "atlas-mos140c-acceptance-replace",
+  "storageRegion": "us-east-1",
+  "ai": {
+    "providerId": "ACCEPTANCE_AI",
+    "modelId": "approved-model",
+    "endpoint": "https://acceptance-ai.example.com/extract"
+  }
+}
