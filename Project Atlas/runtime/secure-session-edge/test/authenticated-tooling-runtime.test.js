@@ -109,5 +109,20 @@ test('production composition loads only APPLICATION credentials and fails closed
   const secretProvider = { getSecret: async (reference) => { seen.push(reference); return 'application-test-password'; } };
   const storage = new ObjectStorageRouter({ provider: 'S3', adapters: { S3: { put: async () => {}, get: async () => ({ body: Buffer.alloc(0) }), remove: async () => {} } } });
   const runtime = await createAuthenticatedTenantRuntime({ edgeConfig: { environment: 'production', origin: 'https://tenant.atlas.invalid', sessionStoreKind: 'postgresql', providers: {} }, oidcProviders: {}, database: { environment: 'production', provider: 'POSTGRESQL', host: 'localhost', database: 'atlas_production_shape', tenantId: TENANT, tls: { required: true, rejectUnauthorized: true }, application: { user: 'application', passwordSecretRef: 'application-secret' } }, secretProvider, storage, aiProvider: { providerId: 'TENANT_AI', modelId: 'approved', process: async () => ({ proposals: [] }) }, PoolCtor: Pool, entitlement: async () => true });
-  assert.deepEqual(seen, ['application-secret']); assert.equal(runtime.foundation.runtime.config.role, 'APPLICATION'); assert.equal(runtime.edge.sessions.store.isDurablePostgresStore, true); await runtime.close(); await migration.close();
+  assert.deepEqual(seen, ['application-secret']);
+  assert.equal(runtime.foundation.runtime.config.role, 'APPLICATION');
+  assert.equal(runtime.edge.sessions.store.isDurablePostgresStore, true);
+  const server = runtime.createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    assert.equal((await fetch(base + '/ready')).status, 200);
+    for (const path of ['/api/tooling/tools', '/api/work-orders', '/work-orders']) {
+      assert.equal((await fetch(base + path)).status, 401, path);
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await runtime.close();
+    await migration.close();
+  }
 });

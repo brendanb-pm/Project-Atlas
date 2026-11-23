@@ -43,6 +43,8 @@ export async function createAuthenticatedTenantRuntime({ edgeConfig, oidcProvide
   const reviews = new AiHumanReviewService({ repository: new PostgresAiHumanReviewRepository({ runtime: foundation.runtime }), toolingService: tooling, clock });
   const protectedApi = new ToolingProtectedApi({ tooling, attachments, ai, reviews });
   const audit = new PostgresSecurityAuditSink({ runtime: foundation.runtime, clock });
-  const edge = createTenantEdge({ config: edgeConfig, providers: oidcProviders, authority, sessionStore: foundation.sessions, attemptStore, protectedApi, readiness: foundation.readiness, audit, clock });
+  const edge = createTenantEdge({ config: edgeConfig, providers: oidcProviders, authority,
+    sessionStore: foundation.sessions, attemptStore, protectedApi, readiness: foundation.readiness,
+    workOrderRuntime: foundation.runtime, audit, clock });
   return Object.freeze({ edge, foundation, services: Object.freeze({ tooling, attachments, ai, reviews }), createServer: () => createHttpServer(edge), async close() { await foundation.close(); } });
 }

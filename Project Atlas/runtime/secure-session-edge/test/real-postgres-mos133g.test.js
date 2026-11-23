@@ -9,6 +9,12 @@ import { PostgresInstallationReadinessValidator } from '../src/postgres-readines
 import { createPostgresRuntimeConfig, PostgresRuntime } from '../src/postgres-runtime.js';
 import { PostgresSessionStore } from '../src/postgres-session-store.js';
 import { hash } from '../src/security.js';
+import { PostgresWorkOrderRepository, WorkOrderService } from '../src/work-orders.js';
+import { PostgresWipBinRepository } from '../src/wip-bin-tracking.js';
+import { createHttpServer, createTenantEdge } from '../src/edge.js';
+import { AtlasAuthority } from '../src/authority.js';
+import { ToolingProtectedApi } from '../src/tooling-api.js';
+import { PostgresToolingRepository, ToolingTraceabilityService } from '../src/tooling-traceability.js';
 
 const ENABLED = process.env.ATLAS_MOS133G_REAL_POSTGRES === '1';
 const DATABASE = 'atlas_preprod_mos133g';
@@ -146,8 +152,80 @@ if (!ENABLED) {
   test('migration and application roles connect independently', async () => { assert.equal((await migrationRuntime.query('SELECT current_user AS role', [], 'MOS133G_MIGRATION_CONNECT')).rows[0].role, MIGRATION_USER); assert.equal((await applicationRuntime.query('SELECT current_user AS role', [], 'MOS133G_APPLICATION_CONNECT')).rows[0].role, APPLICATION_USER); });
   test('application role cannot create schema objects', async () => { await raw(APPLICATION_USER, applicationPassword, (client) => expectSqlState(() => client.query('CREATE TABLE mos133g_forbidden_table(id int)'), '42501')); });
   test('D-A classifies the real empty database without mutating it', async () => { const value = await readiness.inspect(); assert.equal(value.state, 'INITIALIZATION_REQUIRED'); assert.equal(value.remediationCode, 'ATLAS_SCHEMA_UNINITIALIZED'); assert.equal((await admin.query("SELECT count(*)::int AS count FROM information_schema.tables WHERE table_schema='public'")).rows[0].count, 0); });
-  test('accepted migrations apply from empty PostgreSQL 17 in order', async () => { const result = await time('schemaMigration', () => migrations.apply()); assert.deepEqual(result, { state: 'CURRENT', ready: true }); const rows = (await migrationRuntime.query('SELECT migration_id,status FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_ORDER')).rows; assert.deepEqual(rows.map((row) => row.migration_id), FOUNDATION_MIGRATIONS.map((migration) => migration.id)); assert(rows.every((row) => row.status === 'APPLIED')); });
+  test('upgrade from 0014 preserves Job, operation, WIP, tenant, identity and session data', async () => {
+    const previous = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: FOUNDATION_MIGRATIONS.slice(0, -2) });
+    assert.deepEqual(await previous.apply(), { state: 'CURRENT', ready: true });
+    await migrationRuntime.query(`INSERT INTO atlas_installation(installation_id,tenant_id) VALUES('INSTALL-LEGACY-141','TENANT-LEGACY-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_jobs(tenant_id,job_id,work_classification,internal_work_type,title)
+      VALUES('TENANT-LEGACY-141','JOB-LEGACY-141','INTERNAL','FIXTURE_TOOLING','Retained')`);
+    await migrationRuntime.query(`INSERT INTO atlas_job_operations(tenant_id,job_id,job_operation_id,sequence_number,operation_code)
+      VALUES('TENANT-LEGACY-141','JOB-LEGACY-141','LEGACY-OP',1,'INSPECT')`);
+    await migrationRuntime.query("INSERT INTO atlas_users(user_id,display_name) VALUES ('USER-LEGACY-141','Legacy operator')");
+    await migrationRuntime.query(`INSERT INTO atlas_tenant_memberships(tenant_id,membership_id,user_id)
+      VALUES ('TENANT-LEGACY-141','MEMBER-LEGACY-141','USER-LEGACY-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_external_identities(external_identity_id,user_id,provider,issuer,subject)
+      VALUES ('IDENTITY-LEGACY-141','USER-LEGACY-141','GOOGLE','https://issuer.example','legacy-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_wip_bins(tenant_id,wip_bin_id,bin_label,current_location,created_by_user_id)
+      VALUES ('TENANT-LEGACY-141','WIP-BIN-14100000-0000-4000-8000-000000000099','LEGACY','RECEIVING','USER-LEGACY-141')`);
+    await migrationRuntime.query(`INSERT INTO atlas_wip_bin_assignments
+      (tenant_id,wip_bin_assignment_id,wip_bin_id,job_id,assigned_at,assigned_by_user_id,correlation_id)
+      VALUES ('TENANT-LEGACY-141','WIP-ASGN-14100000-0000-4000-8000-000000000099',
+      'WIP-BIN-14100000-0000-4000-8000-000000000099','JOB-LEGACY-141',NOW(),'USER-LEGACY-141','LEGACY-141')`);
+    const legacyStore = new PostgresSessionStore({ runtime: migrationRuntime });
+    const legacySession = await legacyStore.create(session('SESSION-LEGACY-141', 'legacy-fixture', {
+      userId: 'USER-LEGACY-141', permittedTenants: ['TENANT-LEGACY-141'], activeTenant: 'TENANT-LEGACY-141'
+    }));
+    const snapshotSql = `SELECT to_jsonb(j) AS job,to_jsonb(o) AS operation,to_jsonb(i) AS installation,
+      to_jsonb(b) AS bin,to_jsonb(a) AS assignment,to_jsonb(m) AS membership,to_jsonb(e) AS identity
+      FROM atlas_jobs j JOIN atlas_job_operations o USING (tenant_id,job_id)
+      JOIN atlas_installation i USING (tenant_id)
+      JOIN atlas_wip_bin_assignments a USING (tenant_id,job_id)
+      JOIN atlas_wip_bins b USING (tenant_id,wip_bin_id)
+      JOIN atlas_tenant_memberships m USING (tenant_id)
+      JOIN atlas_external_identities e ON e.user_id=m.user_id
+      WHERE j.tenant_id='TENANT-LEGACY-141'`;
+    const snapshot = (await migrationRuntime.query(snapshotSql)).rows;
+    assert.equal(snapshot.length, 1);
+    const intermediate = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: FOUNDATION_MIGRATIONS.slice(0, -1) });
+    assert.deepEqual(await intermediate.apply(), { state: 'CURRENT', ready: true });
+    assert.deepEqual(await migrations.status(), { state: 'UPGRADE_REQUIRED', ready: false });
+    const result = await time('schemaMigration', () => migrations.apply());
+    assert.deepEqual(result, { state: 'CURRENT', ready: true });
+    const rows = (await migrationRuntime.query('SELECT migration_id,status FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_ORDER')).rows;
+    assert.deepEqual(rows.map((row) => row.migration_id), FOUNDATION_MIGRATIONS.map((migration) => migration.id));
+    assert(rows.every((row) => row.status === 'APPLIED'));
+    assert.deepEqual((await migrationRuntime.query(`SELECT j.title,j.version,o.operation_code FROM atlas_jobs j
+      JOIN atlas_job_operations o USING (tenant_id,job_id) WHERE j.tenant_id='TENANT-LEGACY-141'`)).rows,
+    [{ title: 'Retained', version: 1, operation_code: 'INSPECT' }]);
+    assert.equal((await migrationRuntime.query('SELECT count(*)::int AS count FROM atlas_work_order_revisions')).rows[0].count, 0);
+    assert.deepEqual((await migrationRuntime.query(snapshotSql)).rows, snapshot);
+    assert.deepEqual(await legacyStore.getByOpaque('legacy-fixture'), legacySession);
+    await migrationRuntime.query("DELETE FROM atlas_auth_sessions WHERE session_id='SESSION-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_external_identities WHERE external_identity_id='IDENTITY-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_tenant_memberships WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_wip_bin_assignments WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_wip_bins WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_users WHERE user_id='USER-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_job_operations WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_jobs WHERE tenant_id='TENANT-LEGACY-141'");
+    await migrationRuntime.query("DELETE FROM atlas_installation WHERE tenant_id='TENANT-LEGACY-141'");
+  });
   test('application grants exclude installation and migration metadata writes', async () => { await grantApplicationRuntimePrivileges(); await raw(APPLICATION_USER, applicationPassword, async (client) => { await expectSqlState(() => client.query("UPDATE atlas_schema_migrations SET status='FAILED'"), '42501'); await expectSqlState(() => client.query("UPDATE atlas_installation SET tenant_id='BAD'"), '42501'); }); });
+  test('combined migration chain initializes an empty PostgreSQL 17 database in one run', async () => {
+    const database = qid('atlas_combined_' + randomBytes(6).toString('hex'));
+    await bootstrap.query(`CREATE DATABASE ${database} OWNER ${qid(MIGRATION_USER)}`);
+    const runtime = new PostgresRuntime({ ...migrationConfig, database: database.slice(1, -1) });
+    try {
+      const runner = new PostgresMigrationRunner({ runtime });
+      assert.deepEqual(await runner.apply(), { state: 'CURRENT', ready: true });
+      const result = await runtime.query(`SELECT to_regclass('atlas_auth_attempts')::text AS attempts,
+        to_regclass('atlas_work_order_revisions')::text AS revisions`);
+      assert.deepEqual(result.rows, [{ attempts: 'atlas_auth_attempts', revisions: 'atlas_work_order_revisions' }]);
+    } finally {
+      await runtime.close();
+      await bootstrap.query(`DROP DATABASE ${database}`);
+    }
+  });
   test('migration rerun is already-applied and idempotent', async () => { const beforeRows = (await migrationRuntime.query('SELECT migration_id,applied_at FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_BEFORE')).rows; const result = await migrations.apply(); const afterRows = (await migrationRuntime.query('SELECT migration_id,applied_at FROM atlas_schema_migrations ORDER BY migration_id', [], 'MOS133G_MIGRATION_AFTER')).rows; assert.deepEqual(result, { state: 'CURRENT', ready: true }); assert.deepEqual(afterRows, beforeRows); });
   test('checksum verification passes for accepted migrations', async () => assert.deepEqual(await migrations.status(), { state: 'CURRENT', ready: true }));
   test('checksum mismatch fails closed without changing metadata', async () => { const altered = new PostgresMigrationRunner({ runtime: migrationRuntime, migrations: [{ ...FOUNDATION_MIGRATIONS[0], checksum: 'deliberate-mos133g-mismatch' }, ...FOUNDATION_MIGRATIONS.slice(1)] }); assert.deepEqual(await altered.status(), { state: 'CHECKSUM_MISMATCH', ready: false }); await assert.rejects(() => altered.apply(), (error) => error.code === 'SCHEMA_INCOMPATIBLE'); assert.deepEqual(await migrations.status(), { state: 'CURRENT', ready: true }); });
@@ -201,4 +279,170 @@ if (!ENABLED) {
   test('representative real EXPLAIN plans are bounded and recorded', async () => { await plan('customerPk', 'SELECT customer_id,company_name FROM atlas_customers WHERE tenant_id=$1 AND customer_id=$2', [TENANT, 'CUST-REAL-1']); await plan('customerList', 'SELECT customer_id,company_name FROM atlas_customers WHERE tenant_id=$1 ORDER BY customer_id LIMIT 50', [TENANT]); await plan('contactPk', 'SELECT contact_id,display_name FROM atlas_contacts WHERE tenant_id=$1 AND contact_id=$2', [TENANT, (await applicationRuntime.query("SELECT contact_id FROM atlas_contacts WHERE tenant_id=$1 AND display_name='Pat Real'", [TENANT], 'MOS133G_PLAN_CONTACT_ID')).rows[0].contact_id]); await plan('contactsByCustomer', 'SELECT contact_id,display_name FROM atlas_contacts WHERE tenant_id=$1 AND customer_id=$2 AND status=$3 ORDER BY contact_id LIMIT 50', [TENANT, 'CUST-REAL-1', 'ACTIVE']); await plan('rfqReference', 'SELECT rfq_id,customer_id,contact_id FROM atlas_rfqs WHERE tenant_id=$1 AND rfq_id=$2', [TENANT, 'RFQ-REAL-1']); await plan('salesReference', 'SELECT sales_activity_id,customer_id,contact_id FROM atlas_sales_activities WHERE tenant_id=$1 AND sales_activity_id=$2', [TENANT, 'SACT-REAL-1']); await plan('sessionOpaque', 'SELECT session_id,status FROM atlas_auth_sessions WHERE opaque_hash=$1', [hash('opaque-persist')]); await plan('migrationRun', "SELECT correlation_id,outcome FROM atlas_security_audit_events WHERE tenant_id=$1 AND operation='CUSTOMER_CONTACT_MIGRATION' ORDER BY occurred_at DESC LIMIT 20", [TENANT]); assert(Object.values(evidence.plans).every((entry) => entry.executionMs >= 0 && entry.nodes.length > 0)); });
   test('required representative indexes exist with no material design gap', async () => { const names = new Set((await applicationRuntime.query("SELECT indexname FROM pg_indexes WHERE schemaname='public'", [], 'MOS133G_INDEXES')).rows.map((row) => row.indexname)); for (const name of ['atlas_customers_pkey', 'atlas_customers_name_idx', 'atlas_contacts_pkey', 'atlas_contacts_customer_status_idx', 'atlas_rfqs_pkey', 'atlas_sales_activities_pkey', 'atlas_auth_sessions_opaque_hash_key', 'atlas_security_audit_recent_idx']) assert(names.has(name), `Missing ${name}`); });
   test('all rehearsal evidence and logs remain credential-safe', async () => { const serialized = JSON.stringify(evidence); assert.doesNotMatch(serialized, /password|PGPASSWORD|postgres(?:ql)?:\/\/|MOS$/i); });
+
+  const jobId = 'JOB-MOS141';
+  const binId = 'WIP-BIN-14100000-0000-4000-8000-000000000001';
+  const operator = { authoritative: true, tenantId: TENANT, userId: 'USER-MOS141', correlationId: 'MOS141',
+    capabilities: ['WORK_ORDER_READ', 'WORK_ORDER_APPROVE', 'WORK_ORDER_OPERATE'] };
+  const scope = {
+    expectedVersion: 1, authorizationSource: 'Signed customer approval', changeSummary: 'Initial milling',
+    operationsToAdd: [{ code: 'MILL', instructions: 'Mill to drawing' }], services: ['Machining'],
+    approvedPrice: { amount: '123.45', currency: 'USD' }, customerCommitments: 'Send inspection report',
+    specialInstructions: 'Protect threads', handoffs: ['Inspection'], dueAt: '2027-01-12T10:00:00-08:00',
+    evidenceReferences: ['CRM-NOTE-141']
+  };
+  const workOrders = () => new WorkOrderService({ repository: new PostgresWorkOrderRepository({ runtime: applicationRuntime }) });
+
+  test('MOS-141 approves complete initial scope on the existing job and retains MOS-137 association', async () => {
+    await migrationRuntime.query("INSERT INTO atlas_users(user_id,display_name) VALUES ($1,'Operator')", [operator.userId]);
+    await migrationRuntime.query(`INSERT INTO atlas_jobs(tenant_id,job_id,customer_id,title,status)
+      VALUES($1,$2,'CUST-REAL-1','Synthetic work order','RELEASED')`, [TENANT, jobId]);
+    await migrationRuntime.query(`INSERT INTO atlas_wip_bins(tenant_id,wip_bin_id,bin_label,current_location,created_by_user_id)
+      VALUES($1,$2,'BIN-141','RECEIVING',$3)`, [TENANT, binId, operator.userId]);
+    const wip = new PostgresWipBinRepository({ runtime: applicationRuntime });
+    await wip.assign(operator, { wipBinId: binId, jobId,
+      wipBinAssignmentId: 'WIP-ASGN-14100000-0000-4000-8000-000000000002',
+      assignedAt: new Date(), assignedByUserId: operator.userId });
+    const service = workOrders();
+    assert.equal((await service.read(operator, jobId)).readiness, 'APPROVAL_REQUIRED');
+    assert.deepEqual(await service.queue(operator), []);
+    assert.equal((await service.approve(operator, jobId, scope)).revision, 1);
+    const order = await service.read(operator, jobId);
+    assert.equal(order.job.job_id, jobId);
+    assert.equal(order.bin.wip_bin_id, binId);
+    assert.equal(order.approved.approved_by_user_id, operator.userId);
+    assert.ok(order.approved.approved_at instanceof Date);
+    assert.equal(order.approved.authorization_source, scope.authorizationSource);
+    assert.equal(order.approved.scope.dueAt, '2027-01-12T18:00:00.000Z');
+    for (const field of ['services', 'approvedPrice', 'customerCommitments', 'specialInstructions', 'handoffs', 'evidenceReferences']) {
+      assert.deepEqual(order.approved.scope[field], scope[field]);
+    }
+    assert.equal(order.approved.scope.operations[0].instructions, 'Mill to drawing');
+    assert.equal((await wip.projection(operator, binId)).operation.operationCode, 'MILL');
+  });
+
+  test('MOS-141 rejects missing authority, cross-tenant access and evidence-only changes', async () => {
+    const service = workOrders();
+    assert.throws(() => service.approve({ ...operator, capabilities: ['WORK_ORDER_READ'] }, jobId, scope), { code: 'FORBIDDEN' });
+    assert.throws(() => service.approve({ ...operator, authoritative: false }, jobId, scope), { code: 'FORBIDDEN' });
+    await assert.rejects(() => service.read({ ...operator, tenantId: 'TENANT-OTHER' }, jobId), { code: 'NOT_FOUND' });
+    await assert.rejects(() => service.approve({ ...operator, tenantId: 'TENANT-OTHER' }, jobId, scope), { code: 'NOT_FOUND' });
+    assert.throws(() => service.approve(operator, jobId, { ...scope, authorizationSource: '', evidenceReferences: ['SMS-NEW'] }), { code: 'INVALID_REQUEST' });
+    assert.equal((await service.history(operator, jobId)).length, 1);
+  });
+
+  test('MOS-141 concurrent approval retains one winner and projects added finish into the queue', async () => {
+    const service = workOrders();
+    const next = { ...scope, expectedVersion: 2, finish: 'Blue coating', finishOperationCode: 'COAT', changeSummary: 'Customer added coating',
+      evidenceReferences: ['APPROVAL-2'], operationsToAdd: [{ code: 'COAT', instructions: 'Blue coating' }] };
+    await assert.rejects(() => service.approve(operator, jobId, { ...next, operationsToAdd: [] }), { code: 'INVALID_REQUEST' });
+    const results = await Promise.allSettled([service.approve(operator, jobId, next), service.approve(operator, jobId, next)]);
+    assert.equal(results.filter((item) => item.status === 'fulfilled').length, 1);
+    assert.equal(results.find((item) => item.status === 'rejected').reason.code, 'CONFLICT');
+    await assert.rejects(() => service.approve(operator, jobId, next), { code: 'CONFLICT' });
+    const history = await service.history(operator, jobId);
+    assert.deepEqual(history.map((item) => item.revision), [2, 1]);
+    assert.equal(history[0].change_summary, next.changeSummary);
+    assert.deepEqual(history[0].scope.evidenceReferences, ['APPROVAL-2']);
+    assert.equal(history[1].scope.finish, '');
+    assert.deepEqual(history[1].scope.operations.map((item) => item.code), ['MILL']);
+    assert.deepEqual((await service.queue(operator)).map((row) => [row.operation_code, row.finish]), [
+      ['MILL', null], ['COAT', 'Blue coating']
+    ]);
+  });
+
+  test('MOS-141 failed revision rolls back all writes and can be retried with the same version', async () => {
+    const service = workOrders();
+    await admin.query('ALTER TABLE atlas_work_order_revisions ADD CONSTRAINT mos141_failed_write CHECK (change_summary <> \'Inject failure\')');
+    const next = { ...scope, expectedVersion: 3, finish: 'Blue coating', finishOperationCode: 'COAT', changeSummary: 'Inject failure',
+      operationsToAdd: [{ code: 'INSPECT' }] };
+    try {
+      await assert.rejects(() => service.approve(operator, jobId, next), { code: 'PERSISTENCE_UNAVAILABLE' });
+      const order = await service.read(operator, jobId);
+      assert.equal(order.job.version, 3);
+      assert.equal(order.approved.revision, 2);
+      assert.deepEqual(order.operations.map((operation) => operation.operation_code), ['MILL', 'COAT']);
+    } finally {
+      await admin.query('ALTER TABLE atlas_work_order_revisions DROP CONSTRAINT mos141_failed_write');
+    }
+    assert.equal((await service.approve(operator, jobId, { ...next, changeSummary: 'Inspection added' })).revision, 3);
+  });
+
+  test('MOS-141 blocks completion until all approved operations finish and keeps the physical bin assigned', async () => {
+    const service = workOrders();
+    let order = await service.read(operator, jobId);
+    await assert.rejects(() => service.complete(operator, jobId, { expectedVersion: order.job.version }), { code: 'OPERATIONS_INCOMPLETE' });
+    for (const operation of order.operations) {
+      await service.completeOperation(operator, jobId, operation.job_operation_id, { expectedVersion: order.job.version });
+      order = await service.read(operator, jobId);
+      if (operation.operation_code === 'MILL') {
+        const wip = new PostgresWipBinRepository({ runtime: applicationRuntime });
+        assert.equal((await wip.projection(operator, binId)).operation.operationCode, 'COAT');
+      }
+    }
+    assert.equal(order.readiness, 'READY');
+    assert.equal((await service.complete(operator, jobId, { expectedVersion: order.job.version })).status, 'COMPLETE');
+    assert.deepEqual(await service.queue(operator), []);
+    const projection = await new PostgresWipBinRepository({ runtime: applicationRuntime }).projection(operator, binId);
+    assert.equal(projection.job.jobId, jobId);
+    assert.equal(projection.job.releaseRequired, true);
+  });
+
+  test('MOS-141 serves an authenticated operator page and rejects forged authority and invalid CSRF', async () => {
+    const webJob = 'JOB-MOS141-WEB';
+    await migrationRuntime.query(`INSERT INTO atlas_jobs(tenant_id,job_id,customer_id,title,status)
+      VALUES($1,$2,'CUST-REAL-1','Browser intake','RELEASED')`, [TENANT, webJob]);
+    const origin = 'https://atlas.test';
+    const authority = new AtlasAuthority({
+      users: [{ id: operator.userId, status: 'ACTIVE' }],
+      memberships: [{ userId: operator.userId, tenantId: TENANT, status: 'ACTIVE',
+        capabilities: [...operator.capabilities, 'CORE_RECORD_READ', 'TOOLING_READ'] }]
+    });
+    const protectedApi = new ToolingProtectedApi({
+      tooling: new ToolingTraceabilityService({ repository: new PostgresToolingRepository({ runtime: applicationRuntime }) })
+    });
+    const edge = createTenantEdge({
+      config: { environment: 'preproduction', origin, sessionStoreKind: 'postgresql' },
+      providers: {}, authority, sessionStore, protectedApi, workOrderRuntime: applicationRuntime
+    });
+    const session = await edge.sessions.create({ userId: operator.userId, provider: 'GOOGLE', issuer: 'https://fixture.invalid',
+      subject: 'fixture-141', permittedTenants: [TENANT], activeTenant: TENANT });
+    const server = createHttpServer(edge);
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const cookies = { cookie: `atlas_session=${session.opaque}` };
+    try {
+      assert.equal((await fetch(base + '/work-orders')).status, 401);
+      const page = await fetch(base + '/work-orders', { headers: cookies });
+      assert.equal(page.status, 200);
+      assert.match(await page.text(), /Production work orders/);
+      assert.equal((await fetch(base + '/api/tooling/tools', { headers: cookies })).status, 200);
+      assert.equal((await fetch(base + '/api/work-orders', { headers: cookies })).status, 200);
+      const record = await fetch(base + '/api/work-orders/' + jobId, {
+        headers: { ...cookies, 'x-atlas-tenant': 'FORGED', 'x-atlas-user': 'FORGED' }
+      });
+      assert.equal(record.status, 200);
+      assert.equal((await record.json()).data.approved.approved_by_user_id, operator.userId);
+      const denied = await fetch(base + '/api/work-orders/' + jobId + '/approve', {
+        method: 'POST', headers: { ...cookies, origin, 'content-type': 'application/json' },
+        body: JSON.stringify(scope)
+      });
+      assert.equal(denied.status, 403);
+      const accepted = await fetch(base + '/api/work-orders/' + webJob + '/approve', {
+        method: 'POST', headers: { ...cookies, origin, 'x-atlas-csrf': session.csrf, 'content-type': 'application/json' },
+        body: JSON.stringify({ ...scope, userId: 'FORGED', tenantId: 'FORGED' })
+      });
+      assert.equal(accepted.status, 200);
+      assert.equal((await workOrders().read(operator, webJob)).approved.approved_by_user_id, operator.userId);
+      authority.memberships[0].capabilities = ['WORK_ORDER_READ', 'CORE_RECORD_READ'];
+      const noApproval = await fetch(base + '/api/work-orders/' + jobId + '/approve', {
+        method: 'POST', headers: { ...cookies, origin, 'x-atlas-csrf': session.csrf,
+          'x-atlas-capabilities': 'WORK_ORDER_APPROVE', 'content-type': 'application/json' },
+        body: JSON.stringify(scope)
+      });
+      assert.equal(noApproval.status, 403);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
 }

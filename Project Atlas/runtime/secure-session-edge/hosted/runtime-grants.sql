@@ -14,6 +14,9 @@ GRANT SELECT ON atlas_installation, atlas_schema_migrations, atlas_users,
   atlas_tenant_memberships, atlas_external_identities, atlas_assets, atlas_jobs,
   atlas_job_operations, atlas_purchase_requests TO atlas_acceptance_app;
 GRANT INSERT ON atlas_security_events TO atlas_acceptance_app;
+GRANT SELECT, INSERT ON atlas_work_order_revisions TO atlas_acceptance_app;
+GRANT UPDATE ON atlas_jobs TO atlas_acceptance_app;
+GRANT INSERT, UPDATE ON atlas_job_operations TO atlas_acceptance_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   atlas_auth_sessions, atlas_auth_attempts,
   atlas_contextual_attachments, atlas_contextual_attachment_events,

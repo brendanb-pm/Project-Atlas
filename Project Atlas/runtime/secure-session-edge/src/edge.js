@@ -1,11 +1,16 @@
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { EdgeError, errors, safeError } from './errors.js';
 import { cookie, correlationId, hash, parseCookies, randomOpaque, safeRoute, securityHeaders, validOpaque } from './security.js';
 import { PreproductionAuthAttemptStore, PreproductionMemorySessionStore, ProductionSessionStoreUnavailable, SessionService } from './store.js';
+import { PostgresWorkOrderRepository, WorkOrderService } from './work-orders.js';
 
 const SESSION_COOKIE = 'atlas_session';
 const FLOW_COOKIE = 'atlas_auth_flow';
 const MAX_BODY = 8192;
+const workOrderPage = readFileSync(new URL('./work-order.html', import.meta.url));
+const workOrderClient = readFileSync(new URL('./work-order-client.js', import.meta.url));
+const workOrderStyles = readFileSync(new URL('./work-order.css', import.meta.url));
 
 export function createEdgeConfig(input = {}) {
   const environment = input.environment || 'preproduction';
@@ -33,7 +38,7 @@ export class SlidingRateLimiter {
   }
 }
 
-export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, protectedApi = null, readiness = null, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
+export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, protectedApi = null, readiness = null, workOrderRuntime, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
   const config = createEdgeConfig(rawConfig);
   if (!authority || !providers) throw new Error('Secure-session edge dependencies are required.');
   if (config.production && Object.values(providers).some((provider) => provider?.isTestAdapter === true)) throw new Error('Test providers cannot be selected in production.');
@@ -43,7 +48,14 @@ export function createTenantEdge({ config: rawConfig, providers, authority, sess
   const actualAttemptStore = attemptStore || new PreproductionAuthAttemptStore({ clock, enabled: !config.production || config.sessionStoreKind === 'postgresql' });
   const sessions = new SessionService({ store: actualSessionStore, clock, policy: config.policy });
   const rateLimiter = limiter || new SlidingRateLimiter({ clock, policy: config.rateLimit });
-  return { config, providers, authority, sessions, attempts: actualAttemptStore, protectedApi, readiness, audit, clock, rateLimiter, handler: createHandler({ config, providers, authority, sessions, attempts: actualAttemptStore, protectedApi, readiness, audit, clock, rateLimiter }) };
+  if (workOrderRuntime && (workOrderRuntime.config?.role !== 'APPLICATION' || !sessionStore?.isDurablePostgresStore)) {
+    throw new Error('Work orders require the PostgreSQL application runtime and durable sessions.');
+  }
+  const workOrders = workOrderRuntime && new WorkOrderService({
+    repository: new PostgresWorkOrderRepository({ runtime: workOrderRuntime })
+  });
+  const dependencies = { config, providers, authority, sessions, attempts: actualAttemptStore, protectedApi, readiness, audit, clock, rateLimiter };
+  return { ...dependencies, handler: createHandler({ ...dependencies, workOrders }) };
 }
 
 // Compatibility name retained for 1B tests and explicitly preproduction callers.
@@ -64,8 +76,12 @@ function createHandler(deps) {
       if (request.method === 'GET' && url.pathname === '/session/status') return await status(request, response, deps, requestId);
       if (request.method === 'POST' && url.pathname === '/auth/tenant-select') return await selectTenant(request, response, deps, requestId);
       if (request.method === 'POST' && url.pathname === '/auth/logout') return await logout(request, response, deps, requestId);
-      if (url.pathname.startsWith('/api/')) return await protectedRequest(request, response, deps, url, requestId);
       if (request.method === 'GET' && url.pathname === '/preproduction/context') return await contextHarness(request, response, deps, requestId);
+      if (deps.workOrders && (url.pathname === '/api/work-orders' || url.pathname.startsWith('/api/work-orders/') ||
+          url.pathname === '/work-orders' || url.pathname === '/work-order-client.js' || url.pathname === '/work-order.css')) {
+        return await workOrderRequest(request, response, deps, url, requestId);
+      }
+      if (url.pathname.startsWith('/api/')) return await protectedRequest(request, response, deps, url, requestId);
       throw errors.notFound();
     } catch (error) {
       const safe = safeError(error); await audit(deps, requestId, 'REQUEST_FAILURE', safe.code, { route });
@@ -73,6 +89,49 @@ function createHandler(deps) {
       return sendJson(response, safe.status, { state: stateFor(safe.code), message: safe.message, correlationId: requestId });
     }
   };
+}
+
+async function workOrderRequest(request, response, deps, url, requestId) {
+  const match = /^\/api\/work-orders\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159})(?:\/(history|approve|complete|operations\/([A-Za-z0-9][A-Za-z0-9._:-]{0,159})\/complete))?$/.exec(url.pathname);
+  const file = request.method === 'GET' && {
+    '/work-orders': [workOrderPage, 'text/html'],
+    '/work-order-client.js': [workOrderClient, 'text/javascript'],
+    '/work-order.css': [workOrderStyles, 'text/css']
+  }[url.pathname];
+  const queue = request.method === 'GET' && url.pathname === '/api/work-orders';
+  const action = match?.[2];
+  const read = request.method === 'GET' && match && (!action || action === 'history');
+  const write = request.method === 'POST' && match && action && action !== 'history';
+  if (!file && !queue && !read && !write) throw errors.notFound();
+  const record = await resolveSession(request, deps);
+  const capability = !write ? 'WORK_ORDER_READ' : action === 'approve' ? 'WORK_ORDER_APPROVE' : 'WORK_ORDER_OPERATE';
+  const resolved = await authorize(deps, record, 'WORK_ORDER', capability);
+  const context = { ...resolved, authoritative: true, correlationId: requestId };
+  if (write) {
+    requireOrigin(request, deps.config);
+    await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);
+  }
+  await deps.sessions.touch(record);
+  if (file) {
+    response.writeHead(200, { 'Content-Type': `${file[1]}; charset=utf-8` });
+    return response.end(file[0]);
+  }
+  const service = deps.workOrders;
+  let data;
+  if (queue) data = await service.queue(context);
+  else if (read && action === 'history') {
+    const before = url.searchParams.get('before');
+    data = await service.history(context, match[1], before === null ? null : Number(before));
+  } else if (read) {
+    data = await service.read(context, match[1]);
+    data.capabilities = context.capabilities.filter((item) => item.startsWith('WORK_ORDER_'));
+  } else {
+    const body = await jsonBody(request);
+    if (action === 'approve') data = await service.approve(context, match[1], body);
+    else if (action === 'complete') data = await service.complete(context, match[1], body);
+    else data = await service.completeOperation(context, match[1], match[3], body);
+  }
+  return sendJson(response, 200, { data, correlationId: requestId });
 }
 
 async function begin(request, response, deps, requestId) {
