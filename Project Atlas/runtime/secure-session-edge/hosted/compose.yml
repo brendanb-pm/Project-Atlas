@@ -1,0 +1,38 @@
+name: atlas-mos140c-acceptance
+services:
+  application:
+    build:
+      context: ..
+      dockerfile: hosted/Dockerfile
+    read_only: true
+    init: true
+    volumes:
+      - ${ACCEPTANCE_RUNTIME_CONFIG:?Set dedicated acceptance configuration directory}:/config:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: local
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      ACCEPTANCE_HOST: ${ACCEPTANCE_HOST:?Set dedicated DNS hostname}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls:/data
+    logging:
+      driver: local
+  migrate:
+    profiles: ["maintenance"]
+    build:
+      context: ..
+      dockerfile: hosted/Dockerfile
+    command: ["node", "hosted/migrate.mjs"]
+    read_only: true
+    volumes:
+      - ${ACCEPTANCE_MIGRATION_CONFIG:-./unconfigured}:/config:ro
+volumes:
+  tls:

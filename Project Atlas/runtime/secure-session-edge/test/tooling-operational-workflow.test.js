@@ -69,6 +69,7 @@ test('bounded retrieval searches ID, condition, location, nominal and actual geo
   assert.equal((await f.service.search(CONTEXT, 'TOOL CRIB', 25))[0].toolInstanceId, TOOL);
   assert.equal((await f.service.search(CONTEXT, '0.5', 25))[0].nominalDiameter, 0.5);
   assert.equal((await f.service.search(CONTEXT, '0.4975', 25))[0].actualMeasuredDiameter, 0.4975);
+  assert.equal((await f.service.search(CONTEXT, '', 25))[0].toolInstanceId, TOOL, 'empty query is an explicit bounded list');
   await assert.rejects(() => f.service.get({ ...CONTEXT, tenantId: 'TENANT-B' }, TOOL), (error) => error.code === 'NOT_FOUND');
   await assert.rejects(() => f.service.search(CONTEXT, 'x', 25), (error) => error.code === 'INVALID_REQUEST');
   await f.app.close(); await f.migration.close();
