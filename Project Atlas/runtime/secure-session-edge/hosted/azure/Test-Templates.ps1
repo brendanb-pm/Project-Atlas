@@ -15,7 +15,9 @@ $vm = $main.resources | Where-Object type -eq 'Microsoft.Compute/virtualMachines
 $nsg = $main.resources | Where-Object type -eq 'Microsoft.Network/networkSecurityGroups'
 $ip = $main.resources | Where-Object type -eq 'Microsoft.Network/publicIPAddresses'
 $rules = $nsg.properties.securityRules
-if ($main.parameters.postgresAdminPassword.type -ne 'secureString' -or
+if ($main.parameters.location.PSObject.Properties.Name -contains 'defaultValue' -or
+    $main.parameters.vmSize.PSObject.Properties.Name -contains 'defaultValue' -or
+    $main.parameters.postgresAdminPassword.type -ne 'secureString' -or
     $db.properties.version -ne '17' -or $db.properties.storage.storageSizeGB -ne 32 -or
     $db.properties.network.publicNetworkAccess -ne 'Disabled' -or
     -not $db.properties.network.privateDnsZoneArmResourceId -or -not $db.properties.network.delegatedSubnetResourceId -or
