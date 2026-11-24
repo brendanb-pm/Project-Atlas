@@ -1,0 +1,11 @@
+{
+  "origin": "https://atlas-acceptance.greyfirsystems.com",
+  "oidc": {
+    "id": "MICROSOFT",
+    "clientId": "<acceptance-application-client-id>",
+    "authorizationEndpoint": "https://login.microsoftonline.com/<acceptance-tenant-id>/oauth2/v2.0/authorize",
+    "tokenEndpoint": "https://login.microsoftonline.com/<acceptance-tenant-id>/oauth2/v2.0/token",
+    "jwksUri": "https://login.microsoftonline.com/<acceptance-tenant-id>/discovery/v2.0/keys",
+    "issuers": ["https://login.microsoftonline.com/<acceptance-tenant-id>/v2.0"]
+  }
+}
