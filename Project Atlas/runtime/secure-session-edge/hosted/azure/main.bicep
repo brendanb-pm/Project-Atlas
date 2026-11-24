@@ -8,6 +8,8 @@ param sshPublicKey string
 @description('Operator public IPv4 address with an explicit /32.')
 param operatorSshCidr string
 param vmAdminUsername string = 'atlasoperator'
+@description('Exact Ubuntu 24.04 server image version verified in West US 2. Record it in the approval evidence.')
+param ubuntuImageVersion string
 @secure()
 param postgresAdminPassword string
 
@@ -51,6 +53,19 @@ resource securityGroup 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
           sourcePortRange: '*'
           destinationPortRanges: ['80', '443']
           sourceAddressPrefix: 'Internet'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'deny-other-inbound'
+        properties: {
+          priority: 120
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
         }
       }
@@ -173,7 +188,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
         publisher: 'Canonical'
         offer: 'ubuntu-24_04-lts'
         sku: 'server'
-        version: 'latest'
+        version: ubuntuImageVersion
       }
       osDisk: {
         diskSizeGB: 64
