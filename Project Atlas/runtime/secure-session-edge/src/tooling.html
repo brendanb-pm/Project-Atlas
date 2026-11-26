@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tooling | Atlas</title>
 <link rel="stylesheet" href="/tooling.css">
-<main data-tooling-write="TOOLING_WRITE_ALLOWED" data-attachment-write="ATTACHMENT_WRITE_ALLOWED">
+<main data-tooling-write="TOOLING_WRITE_ALLOWED" data-attachment-write="ATTACHMENT_WRITE_ALLOWED" data-tenant="TOOLING_ACTIVE_TENANT">
   <h1>Tooling</h1>
   <form id="search">
     <label for="query">Search by tool ID, description, location or diameter</label>
@@ -46,7 +46,11 @@
           <label><input type="checkbox" required> Replace the current locator and invalidate the old one</label>
           <button>Rotate locator</button>
         </form>
-        <p id="locator" role="status"></p>
+        <div id="locator-result" hidden>
+          <p id="locator" tabindex="-1"></p>
+          <button type="button" id="acknowledge-locator">I've captured the locator</button>
+        </div>
+        <button type="button" id="review-regrind" hidden>Discard the reviewed regrind draft</button>
       </div>
     </div>
   </section>

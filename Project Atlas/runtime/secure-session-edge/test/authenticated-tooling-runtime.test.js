@@ -22,7 +22,7 @@ const TOOL = 'TOOL-140c0000-0000-4000-8000-000000000002';
 
 function providerConfig() { return { id: 'GOOGLE', enabled: true, clientId: 'google-client', authorizationEndpoint: 'https://google.invalid/authorize', tokenEndpoint: 'https://google.invalid/token', jwksUri: 'https://google.invalid/jwks', redirectUri: `${ORIGIN}/auth/callback`, issuers: ['https://google.issuer.invalid'], scopes: ['openid'] }; }
 
-async function fixture() {
+async function fixture({ rateLimit } = {}) {
   const db = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true }); const { Pool } = db.adapters.createPg();
   const secretProvider = { getSecret: async () => 'test-only-password' }, base = { environment: 'test', host: 'localhost', database: 'atlas_runtime', user: 'atlas', passwordSecretRef: 'test', tls: { required: false } };
   const app = new PostgresRuntime(await createPostgresRuntimeConfig({ ...base, role: 'APPLICATION' }, { secretProvider }), { PoolCtor: Pool });
@@ -36,7 +36,7 @@ async function fixture() {
   const tooling = new ToolingTraceabilityService({ repository: new PostgresToolingRepository({ runtime: app }) });
   const storage = new ObjectStorageRouter({ provider: 'TEST', adapters: { TEST: new InMemoryObjectStorageAdapter() } });
   const attachments = new ContextualAttachmentService({ repository: new PostgresContextualAttachmentRepository({ runtime: app }), storage });
-  const edge = createTenantEdge({ config: { environment: 'preproduction', origin: ORIGIN, sessionStoreKind: 'postgresql', allowedRoutes: ['tooling'], providers: { GOOGLE: config } }, providers: { GOOGLE: provider }, authority, sessionStore: new PostgresSessionStore({ runtime: app }), attemptStore: new PostgresAuthAttemptStore({ runtime: app }), protectedApi: new ToolingProtectedApi({ tooling, attachments }) });
+  const edge = createTenantEdge({ config: { environment: 'preproduction', origin: ORIGIN, sessionStoreKind: 'postgresql', allowedRoutes: ['tooling'], providers: { GOOGLE: config }, rateLimit }, providers: { GOOGLE: provider }, authority, sessionStore: new PostgresSessionStore({ runtime: app }), attemptStore: new PostgresAuthAttemptStore({ runtime: app }), protectedApi: new ToolingProtectedApi({ tooling, attachments }) });
   const server = createHttpServer(edge);
   // The test browser uses loopback HTTP. Bridge only its exact Origin in this test fixture.
   server.prependListener('request', (request) => {
@@ -88,6 +88,8 @@ test('tooling API enforces CSRF, current capability and durable callback replay 
   const reader = await f.request('/tooling');
   assert.equal(reader.response.status, 200);
   assert.match(reader.body, /data-tooling-write="false" data-attachment-write="false"/);
+  assert.equal((await f.request('/api/tooling/tools', { headers: { 'x-atlas-tooling-tenant': 'OTHER' } })).response.status, 412);
+  assert.equal((await f.request('/api/tooling/tools', { headers: { 'x-atlas-tooling-tenant': TENANT } })).response.status, 200);
   const denied = await f.request('/api/tooling/tool-types', { method: 'POST', headers: { 'content-type': 'application/json', 'x-atlas-csrf': csrf }, body: JSON.stringify({ toolTypeId: TYPE, description: 'Denied', toolClass: 'END_MILL', unitSystem: 'INCH' }) }); assert.equal(denied.response.status, 403);
   assert.equal((await f.request('/api/tooling/tools?query=%27%3B%20DROP%20TABLE&limit=1000')).response.status, 400);
   const started = await f.request('/auth/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: 'GOOGLE', intendedRoute: 'tooling' }) }); const state = new URL(started.body.authorizationUrl).searchParams.get('state'), nonce = new URL(started.body.authorizationUrl).searchParams.get('nonce'); f.provider.claimsByCode.replay = { signatureVerified: true, iss: 'https://google.issuer.invalid', aud: 'google-client', sub: 'runtime-subject', nonce, exp: Math.floor(Date.now() / 1000) + 600 };
@@ -98,7 +100,7 @@ test('tooling API enforces CSRF, current capability and durable callback replay 
 test('hosted Tooling supports keyboard selection, evidence, regrind and locator persistence', {
   skip: !process.env.ATLAS_PLAYWRIGHT_MODULE
 }, async (t) => {
-  const f = await fixture();
+  const f = await fixture({ rateLimit: { windowMs: 60000, max: 100 } });
   t.after(() => f.close());
   const login = await authenticate(f);
   const headers = { 'content-type': 'application/json', 'x-atlas-csrf': login.body.csrfToken };
@@ -114,43 +116,101 @@ test('hosted Tooling supports keyboard selection, evidence, regrind and locator 
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.addCookies([...f.jar].map(([name, value]) => ({ name, value, url: f.baseUrl, httpOnly: true })));
   const page = await context.newPage();
+  page.setDefaultTimeout(6000);
   await page.goto(f.baseUrl + '/tooling');
   const result = page.getByRole('button', { name: /Runtime end mill/ });
   await result.waitFor();
   await page.getByRole('searchbox').fill('missing tool');
   await page.getByRole('searchbox').press('Enter');
   await page.getByText('No matching tools.').waitFor();
+  let releaseSearch;
+  const delayedSearch = new Promise((resolve) => { releaseSearch = resolve; });
+  await page.route('**/api/tooling/tools?query=old', async (route) => {
+    await delayedSearch;
+    await route.fulfill({ json: { data: [{ description: 'Stale result', toolInstanceId: TOOL, condition: 'NEW' }] } });
+  });
+  await page.getByRole('searchbox').fill('old');
+  await page.getByRole('searchbox').press('Enter');
   await page.getByRole('searchbox').fill('Runtime');
   await page.getByRole('searchbox').press('Enter');
+  await result.waitFor();
+  releaseSearch();
   await result.press('Enter');
   await page.getByText('No evidence attached.').waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'tool-heading');
   await page.getByLabel('Inspection or other evidence file').setInputFiles({
     name: 'inspection.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic inspection')
   });
+  const uploadKeys = [];
+  await page.route('**/attachments', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    uploadKeys.push(route.request().headers()['x-atlas-idempotency-key']);
+    if (uploadKeys.length !== 1) return route.continue();
+    assert.equal((await route.fetch()).status(), 201);
+    await route.abort();
+  });
   await page.getByRole('button', { name: 'Upload evidence' }).press('Enter');
+  await page.locator('#status').getByText(/save result is uncertain/).waitFor();
+  await page.getByRole('button', { name: 'Upload evidence' }).press('Enter');
+  await page.locator('#status').getByText('Saved.', { exact: true }).waitFor();
+  assert.equal(uploadKeys.length, 2);
+  assert.equal(uploadKeys[0], uploadKeys[1]);
   await page.locator('#evidence').getByText(/inspection.txt/).waitFor({ timeout: 5000 }).catch(async (error) => { throw new Error(await page.locator('#status').textContent(), { cause: error }); });
   await page.getByLabel(/Measured diameter/).fill('0.475');
   await page.getByLabel('Reason').fill('Synthetic regrind');
   await page.getByLabel('Evidence', { exact: true }).selectOption({ label: 'inspection.txt' });
-  await page.getByRole('button', { name: 'Save regrind' }).press('Enter');
+  let regrindPosts = 0;
+  await page.route('**/regrinds', async (route) => {
+    regrindPosts++;
+    assert.equal((await route.fetch()).status(), 201);
+    await route.abort();
+  });
+  const saveRegrind = page.getByRole('button', { name: 'Save regrind' });
+  await saveRegrind.press('Enter');
   await page.locator('#history').getByText(/regrind measurement.*0.475/).waitFor();
+  await page.locator('#status').getByText(/save result is uncertain/).waitFor();
+  assert.equal(await page.getByLabel('Reason').inputValue(), 'Synthetic regrind');
+  await saveRegrind.press('Enter');
+  await page.locator('#status').getByText(/discard the reviewed draft/).waitFor();
+  assert.equal(regrindPosts, 1);
+  await page.getByRole('button', { name: 'Discard the reviewed regrind draft' }).click();
   const rotate = async () => {
     await page.getByRole('checkbox', { name: /Replace the current locator/ }).check();
     await page.getByRole('button', { name: 'Rotate locator' }).press('Enter');
     const locator = page.locator('#locator');
     await locator.getByText(/New locator/).waitFor();
     await page.locator('#status').getByText('Saved.', { exact: true }).waitFor();
-    return (await locator.textContent()).split(': ').at(-1);
+    const token = (await locator.textContent()).split(': ').at(-1);
+    await result.click();
+    assert.match(await locator.textContent(), new RegExp(token));
+    await page.getByRole('button', { name: "I've captured the locator" }).press('Enter');
+    assert.equal(await locator.textContent(), '');
+    return token;
   };
   const first = await rotate();
   const second = await rotate();
   assert.notEqual(first, second);
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   const resolve = (token) => f.request('/api/tooling/locators/resolve?' + new URLSearchParams({ token }));
   assert.equal((await resolve(first)).response.status, 404);
   await page.reload();
   assert.equal((await resolve(second)).body.data.toolInstanceId, TOOL);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await result.press('Enter');
+  const rotation = page.getByRole('button', { name: 'Rotate locator' });
+  const confirmRotation = page.getByRole('checkbox', { name: /Replace the current locator/ });
+  let interruptedRotations = 0;
+  await page.route('**/identifiers/replace', async (route) => {
+    interruptedRotations++;
+    await route.abort();
+  });
+  await confirmRotation.check();
+  await rotation.press('Enter');
+  await page.locator('#status').getByText(/Rotation is paused/).waitFor();
+  assert.equal(await confirmRotation.isChecked(), true);
+  await rotation.press('Enter');
+  await page.locator('#status').getByText(/review history and reopen Tooling/).waitFor();
+  assert.equal(interruptedRotations, 1);
   await f.app.query('UPDATE atlas_tenant_memberships SET capabilities_json=$2::jsonb WHERE tenant_id=$1', [
     TENANT, JSON.stringify(['CORE_RECORD_READ', 'TOOLING_READ', 'ATTACHMENT_READ'])
   ]);
@@ -159,6 +219,12 @@ test('hosted Tooling supports keyboard selection, evidence, regrind and locator 
   await page.locator('#evidence').getByText(/inspection.txt/).waitFor({ timeout: 5000 }).catch(async (error) => { throw new Error(await page.locator('#status').textContent(), { cause: error }); });
   assert.equal(await page.getByRole('button', { name: 'Rotate locator' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Save regrind' }).count(), 0);
+  assert.equal(await page.getByRole('main').count(), 1);
+  assert.equal(await page.getByRole('heading', { level: 1, name: 'Tooling' }).count(), 1);
+  await context.clearCookies();
+  await page.getByRole('button', { name: 'Search' }).click();
+  await page.locator('#status').getByText(/Your session ended/).waitFor();
+  assert.equal(await page.locator('#selected').isVisible(), false);
 });
 
 test('operator tooling, attachment and AI routes are fixed, bounded service delegations', async () => {

@@ -2,16 +2,45 @@ const byId = (id) => document.getElementById(id);
 const status = (id, text) => { byId(id).textContent = text; };
 const root = '/api/tooling';
 const page = document.querySelector('main');
-let tenant;
+const tenant = page.dataset.tenant;
 let current;
+let selectedId;
 let selection = 0;
+let searchGeneration = 0;
 let evidence = [];
 let nextCursor;
 let busy = false;
 let uploadAttempt;
+let regrindVersion;
+let uncertainRotation = false;
+let staleSession = false;
+
+function clearLocator() {
+  status('locator', '');
+  byId('locator-result').hidden = true;
+}
+
+function endSession(message) {
+  staleSession = true;
+  current = undefined;
+  selection++;
+  searchGeneration++;
+  clearLocator();
+  byId('selected').hidden = true;
+  byId('results').replaceChildren();
+  status('search-status', message);
+  status('status', message);
+}
 
 async function request(path, options) {
-  const response = await fetch(path, options);
+  let response;
+  try {
+    response = await fetch(path, {
+      ...options, headers: { ...options?.headers, 'x-atlas-tooling-tenant': tenant }
+    });
+  } catch {
+    throw Error('The service could not be reached.');
+  }
   if (!response.ok) {
     const messages = {
       400: 'Check the entered values.',
@@ -19,11 +48,14 @@ async function request(path, options) {
       403: 'Access was denied. Check your permissions or reopen Tooling.',
       404: 'This record or service is unavailable.',
       409: 'The record changed. Review the latest details before retrying.',
+      412: 'The active tenant changed. Reopen Tooling.',
       429: 'Too many requests. Wait a moment and try again.'
     };
-    throw Error(messages[response.status] || 'The service is unavailable. Try again later.');
+    const message = messages[response.status] || 'The service is unavailable. Try again later.';
+    if (response.status === 401 || response.status === 412) endSession(message);
+    throw Object.assign(Error(message), { status: response.status });
   }
-  return response.json();
+  try { return await response.json(); } catch { throw Error('The service returned an unreadable response.'); }
 }
 
 function item(text) {
@@ -38,21 +70,36 @@ function measure(value, units) {
 
 function toolPath(tool) { return root + '/tools/' + encodeURIComponent(tool.toolInstanceId); }
 
-async function search(query) {
+async function search(query, generation) {
   byId('results').replaceChildren();
   status('search-status', 'Searching…');
   try {
     const { data } = await request(root + '/tools?' + new URLSearchParams({ query }));
+    if (generation !== searchGeneration) return;
     for (const tool of data) {
       const row = item('');
       const button = document.createElement('button');
       button.textContent = [tool.description, tool.toolInstanceId, tool.condition].join(' · ');
-      button.addEventListener('click', () => { if (!busy) void select(tool, true); });
+      button.addEventListener('click', () => {
+        if (busy || staleSession) return;
+        if (!byId('locator-result').hidden) {
+          status('status', 'Acknowledge the replacement locator before selecting a tool.');
+          byId('acknowledge-locator').focus();
+          return;
+        }
+        const different = selectedId !== tool.toolInstanceId;
+        if (different && (regrindVersion !== undefined || uploadAttempt)) {
+          status('status', 'Resolve the pending save for this tool before selecting another.');
+          byId('status').focus();
+          return;
+        }
+        void select(tool, different);
+      });
       row.append(button);
       byId('results').append(row);
     }
     status('search-status', data.length ? `${data.length} tools shown.` : 'No matching tools.');
-  } catch (error) { status('search-status', error.message); }
+  } catch (error) { if (generation === searchGeneration) status('search-status', error.message); }
 }
 
 function renderTool(tool) {
@@ -85,11 +132,17 @@ async function loadEvidence(path, id, cursor) {
     if (selection !== id) return;
     evidence.push(...data.items);
     nextCursor = data.nextCursor;
-    const choice = byId('attachment').value;
+    const selectedOption = byId('attachment').selectedOptions[0];
+    const choice = selectedOption?.value;
     byId('attachment').replaceChildren(new Option('No evidence linked', ''), ...evidence
       .filter((entry) => entry.upload_status === 'AVAILABLE')
       .map((entry) => new Option(entry.file_name, entry.attachment_id)));
-    if (evidence.some((entry) => entry.attachment_id === choice)) byId('attachment').value = choice;
+    if (choice) {
+      if (![...byId('attachment').options].some((option) => option.value === choice)) {
+        byId('attachment').append(new Option(selectedOption.text, choice));
+      }
+      byId('attachment').value = choice;
+    }
     byId('evidence').replaceChildren(...evidence.map((entry) => item(
       [entry.file_name, entry.category, entry.upload_status, entry.description].filter(Boolean).join(' · '))));
     status('evidence-status', evidence.length ? '' : 'No evidence attached.');
@@ -117,11 +170,15 @@ async function loadHistory(path, id) {
 
 async function select(tool, moveFocus = false) {
   const id = ++selection;
+  selectedId = tool.toolInstanceId;
   const path = toolPath(tool);
   if (moveFocus) {
     uploadAttempt = undefined;
+    regrindVersion = undefined;
+    byId('review-regrind').hidden = true;
     for (const form of ['upload', 'regrind', 'rotate']) byId(form).reset();
-    status('locator', '');
+    byId('attachment').replaceChildren();
+    clearLocator();
     status('tool-heading', 'Tool details');
     byId('tool-heading').focus();
   }
@@ -146,30 +203,58 @@ function mutation(formId, action) {
   const form = byId(formId);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (busy || !current) return;
+    if (busy || staleSession || !current) return;
+    if (formId === 'rotate' && (uncertainRotation || !byId('locator-result').hidden)) {
+      status('status', 'Capture and acknowledge the locator, or review history and reopen Tooling if rotation was interrupted.');
+      return;
+    }
+    if (formId === 'regrind' && regrindVersion !== undefined && current.version !== regrindVersion) {
+      status('status', 'Review the recorded measurement and history, then discard the reviewed draft before starting another regrind.');
+      return;
+    }
     const tool = current;
     const fields = new FormData(form);
     busy = true;
-    const controls = [...document.querySelectorAll('#selected button, #results button')];
+    const controls = [...document.querySelectorAll('#selected button, #selected input, #selected select, #results button')];
     for (const control of controls) control.disabled = true;
     status('status', 'Saving…');
+    let sent = false;
     try {
       const session = await request('/session/status');
-      if (session.activeTenant !== tenant) {
-        location.reload();
+      if (encodeURIComponent(session.activeTenant) !== tenant) {
+        endSession('The active tenant changed. Reopen Tooling.');
         return;
       }
+      sent = true;
       await action(tool, fields, { 'x-atlas-csrf': session.csrfToken });
+      if (staleSession) return;
       form.reset();
+      if (formId === 'regrind') {
+        regrindVersion = undefined;
+        byId('review-regrind').hidden = true;
+      }
       await select(tool);
       if (current) status('status', 'Saved.');
     } catch (error) {
+      if (staleSession) return;
+      const ambiguous = sent && (!error.status || error.status >= 500);
+      if (ambiguous && formId === 'rotate') uncertainRotation = true;
+      if ((ambiguous || error.status === 409) && formId === 'regrind') regrindVersion ??= tool.version;
+      if (formId === 'upload' && !ambiguous) uploadAttempt = undefined;
       await select(tool);
-      status('status', error.message + ' Review the current details and history before retrying.');
+      if (staleSession) return;
+      byId('review-regrind').hidden = regrindVersion === undefined || !current;
+      const message = ambiguous
+        ? 'The save result is uncertain. ' + (formId === 'rotate'
+          ? 'Review locator history before reopening Tooling. Rotation is paused.'
+          : 'Review the updated details and history before retrying.')
+        : error.message;
+      status('status', message);
     } finally {
       busy = false;
       for (const control of controls) control.disabled = false;
-      byId('status').focus();
+      byId('file').disabled = Boolean(uploadAttempt);
+      byId(byId('locator-result').hidden ? 'status' : 'locator').focus();
     }
   });
 }
@@ -189,16 +274,18 @@ mutation('regrind', (tool, fields, headers) => post(tool, '/regrinds', headers, 
 }));
 
 mutation('rotate', async (tool, _fields, headers) => {
-  status('locator', '');
   const { data } = await post(tool, '/identifiers/replace', headers, {});
+  if (staleSession) return;
   status('locator', 'New locator. Copy it onto the replacement label now: ' + data.opaqueToken);
+  byId('locator-result').hidden = false;
 });
 
-mutation('upload', async (tool, fields, headers) => {
-  const file = fields.get('file');
-  if (!file.name || /[^\x20-\x7e]/.test(file.name)) throw Error('Choose a file with a printable ASCII filename.');
-  const selectedFile = byId('file').files[0];
-  if (uploadAttempt?.file !== selectedFile) uploadAttempt = { file: selectedFile, key: crypto.randomUUID() };
+mutation('upload', async (tool, _fields, headers) => {
+  const file = byId('file').files[0];
+  if (!file?.name || /[^\x20-\x7e]/.test(file.name)) {
+    throw Object.assign(Error('Choose a file with a printable ASCII filename.'), { status: 400 });
+  }
+  uploadAttempt ??= { key: crypto.randomUUID() };
   await request(toolPath(tool) + '/attachments', {
     method: 'POST',
     headers: { ...headers, 'content-type': file.type || 'application/octet-stream',
@@ -212,23 +299,40 @@ mutation('upload', async (tool, fields, headers) => {
 byId('more-evidence').addEventListener('click', () => {
   if (current && !busy && nextCursor) void loadEvidence(toolPath(current), selection, nextCursor);
 });
+byId('acknowledge-locator').addEventListener('click', () => {
+  clearLocator();
+  byId('rotate').querySelector('button').focus();
+});
+byId('review-regrind').addEventListener('click', () => {
+  byId('regrind').reset();
+  regrindVersion = undefined;
+  byId('review-regrind').hidden = true;
+  byId('diameter').focus();
+});
+window.addEventListener('pagehide', clearLocator);
 byId('search').addEventListener('submit', (event) => {
   event.preventDefault();
   const query = byId('query').value.trim();
-  if (busy || !tenant || byId('search').ariaBusy === 'true') return;
+  if (busy || staleSession) return;
   if (query.length === 1) return status('search-status', 'Enter at least two characters or clear the search.');
   void runSearch(query);
 });
 
 async function runSearch(query) {
   const form = byId('search');
+  const generation = ++searchGeneration;
   form.ariaBusy = 'true';
-  try { await search(query); } finally { form.ariaBusy = 'false'; }
+  try { await search(query, generation); } finally {
+    if (generation === searchGeneration) form.ariaBusy = 'false';
+  }
 }
 
 status('search-status', 'Checking your session…');
 try {
   const session = await request('/session/status');
-  tenant = session.activeTenant;
-  await runSearch('');
+  if (encodeURIComponent(session.activeTenant) !== tenant) {
+    endSession('The active tenant changed. Reopen Tooling.');
+  } else {
+    await runSearch('');
+  }
 } catch (error) { status('search-status', error.message); }

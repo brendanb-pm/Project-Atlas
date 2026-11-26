@@ -91,6 +91,7 @@ function createHandler(deps) {
         response.writeHead(200, { 'Content-Type': (page ? 'text/html' : styles ? 'text/css' : 'text/javascript') + '; charset=utf-8' });
         return response.end(page ? toolingPage
           .replace('TOOLING_WRITE_ALLOWED', String(authority.capabilities.includes('TOOLING_WRITE')))
+          .replace('TOOLING_ACTIVE_TENANT', encodeURIComponent(authority.tenantId))
           .replace('ATTACHMENT_WRITE_ALLOWED', String(authority.capabilities.includes('ATTACHMENT_WRITE'))) : styles ? toolingStyles : toolingClient);
       }
       if (deps.workOrders && (url.pathname === '/api/work-orders' || url.pathname.startsWith('/api/work-orders/') ||
@@ -212,6 +213,11 @@ async function protectedRequest(request, response, deps, url, requestId) {
   if (!descriptor) throw errors.notFound();
   deps.rateLimiter.consume(`api:${remoteKey(request)}`);
   const record = await resolveSession(request, deps);
+  const expectedTenant = request.headers['x-atlas-tooling-tenant'];
+  if (url.pathname.startsWith('/api/tooling/') && expectedTenant !== undefined &&
+      expectedTenant !== encodeURIComponent(record.activeTenant)) {
+    throw new EdgeError('TOOLING_TENANT_CHANGED', 'Reopen Tooling for the active tenant.', 412);
+  }
   if (descriptor.mutation) {
     requireOrigin(request, deps.config);
     await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);
