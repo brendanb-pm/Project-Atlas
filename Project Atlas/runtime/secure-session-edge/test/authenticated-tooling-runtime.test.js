@@ -36,10 +36,14 @@ async function fixture({ rateLimit } = {}) {
   const tooling = new ToolingTraceabilityService({ repository: new PostgresToolingRepository({ runtime: app }) });
   const storage = new ObjectStorageRouter({ provider: 'TEST', adapters: { TEST: new InMemoryObjectStorageAdapter() } });
   const attachments = new ContextualAttachmentService({ repository: new PostgresContextualAttachmentRepository({ runtime: app }), storage });
-  const edge = createTenantEdge({ config: { environment: 'preproduction', origin: ORIGIN, sessionStoreKind: 'postgresql', allowedRoutes: ['tooling'], providers: { GOOGLE: config }, rateLimit }, providers: { GOOGLE: provider }, authority, sessionStore: new PostgresSessionStore({ runtime: app }), attemptStore: new PostgresAuthAttemptStore({ runtime: app }), protectedApi: new ToolingProtectedApi({ tooling, attachments }) });
+  // These tests compress a manual workflow. Advance the clock between requests;
+  // the dedicated limiter suite checks actual burst and sustained budgets.
+  let simulatedTime = Date.now();
+  const edge = createTenantEdge({ config: { environment: 'preproduction', origin: ORIGIN, sessionStoreKind: 'postgresql', allowedRoutes: ['tooling'], providers: { GOOGLE: config }, rateLimit }, providers: { GOOGLE: provider }, authority, sessionStore: new PostgresSessionStore({ runtime: app }), attemptStore: new PostgresAuthAttemptStore({ runtime: app }), protectedApi: new ToolingProtectedApi({ tooling, attachments }), clock: () => new Date(simulatedTime) });
   const server = createHttpServer(edge);
   // The test browser uses loopback HTTP. Bridge only its exact Origin in this test fixture.
   server.prependListener('request', (request) => {
+    simulatedTime += 1000;
     if (request.headers.origin === `http://127.0.0.1:${server.address().port}`) request.headers.origin = ORIGIN;
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

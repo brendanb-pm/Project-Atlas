@@ -4,6 +4,7 @@ import { EdgeError, errors, safeError } from './errors.js';
 import { cookie, correlationId, hash, parseCookies, randomOpaque, safeRoute, securityHeaders, validOpaque } from './security.js';
 import { PreproductionAuthAttemptStore, PreproductionMemorySessionStore, ProductionSessionStoreUnavailable, SessionService } from './store.js';
 import { PostgresWorkOrderRepository, WorkOrderService } from './work-orders.js';
+import { rateLimitError, ToolingRateLimiter } from './tooling-rate-limit.js';
 
 const SESSION_COOKIE = 'atlas_session';
 const FLOW_COOKIE = 'atlas_auth_flow';
@@ -32,16 +33,20 @@ export class MemoryAuditSink {
 }
 
 export class SlidingRateLimiter {
-  constructor({ clock = () => new Date(), policy } = {}) { this.clock = clock; this.policy = policy; this.events = new Map(); }
+  constructor({ clock = () => new Date(), policy, scope = 'peer' } = {}) { this.clock = clock; this.policy = policy; this.scope = scope; this.events = new Map(); }
   consume(key) {
     if (!this.policy || !Number.isInteger(this.policy.max) || this.policy.max < 1 || !Number.isInteger(this.policy.windowMs) || this.policy.windowMs < 1000) throw errors.providerUnavailable();
     const now = this.clock().getTime(), threshold = now - this.policy.windowMs, items = (this.events.get(key) || []).filter((value) => value > threshold);
-    if (items.length >= this.policy.max) throw new EdgeError('RATE_LIMITED', 'Try again shortly.', 429);
+    if (items.length >= this.policy.max) throw rateLimitError(this.scope, this.policy.max, items[0] - threshold);
+    if (!this.events.has(key) && this.events.size >= 4096) {
+      for (const [name, events] of this.events) if (events.at(-1) <= threshold) this.events.delete(name);
+      if (this.events.size >= 4096) throw rateLimitError('peer-capacity', 4096, this.policy.windowMs);
+    }
     items.push(now); this.events.set(key, items);
   }
 }
 
-export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, protectedApi = null, readiness = null, workOrderRuntime, audit = new MemoryAuditSink(), clock = () => new Date(), limiter } = {}) {
+export function createTenantEdge({ config: rawConfig, providers, authority, sessionStore, attemptStore, protectedApi = null, readiness = null, workOrderRuntime, audit = new MemoryAuditSink(), clock = () => new Date(), limiter, onThrottle } = {}) {
   const config = createEdgeConfig(rawConfig);
   if (!authority || !providers) throw new Error('Secure-session edge dependencies are required.');
   if (config.production && Object.values(providers).some((provider) => provider?.isTestAdapter === true)) throw new Error('Test providers cannot be selected in production.');
@@ -58,7 +63,10 @@ export function createTenantEdge({ config: rawConfig, providers, authority, sess
     repository: new PostgresWorkOrderRepository({ runtime: workOrderRuntime })
   });
   const dependencies = { config, providers, authority, sessions, attempts: actualAttemptStore, protectedApi, readiness, audit, clock, rateLimiter };
-  return { ...dependencies, handler: createHandler({ ...dependencies, workOrders }) };
+  return { ...dependencies, handler: createHandler({ ...dependencies, workOrders, onThrottle,
+    toolingLimiter: new ToolingRateLimiter({ clock }),
+    toolingLookupLimiter: new SlidingRateLimiter({ clock, policy: { windowMs: 60000, max: 600 }, scope: 'authentication-peer' }),
+    toolingChecks: 0 }) };
 }
 
 // Compatibility name retained for 1B tests and explicitly preproduction callers.
@@ -101,7 +109,15 @@ function createHandler(deps) {
       if (url.pathname.startsWith('/api/')) return await protectedRequest(request, response, deps, url, requestId);
       throw errors.notFound();
     } catch (error) {
-      const safe = safeError(error); await audit(deps, requestId, 'REQUEST_FAILURE', safe.code, { route });
+      const safe = safeError(error);
+      if (safe.throttle) {
+        response.setHeader('Retry-After', safe.throttle.retryAfter);
+        try {
+          deps.onThrottle?.({ operation: 'EDGE_RATE_LIMIT', status: 429,
+            category: url.pathname.startsWith('/api/tooling/') ? request.method === 'GET' ? 'tooling-read' : 'tooling-write' : 'other',
+            reason: safe.code, ...safe.throttle });
+        } catch { /* Diagnostic failure cannot change admission. */ }
+      } else await audit(deps, requestId, 'REQUEST_FAILURE', safe.code, { route });
       if (safe.code === 'SESSION_EXPIRED' || safe.code === 'SESSION_REVOKED') clearSession(response, deps.config);
       return sendJson(response, safe.status, { state: stateFor(safe.code), message: safe.message, correlationId: requestId });
     }
@@ -211,24 +227,48 @@ async function protectedRequest(request, response, deps, url, requestId) {
   if (!deps.protectedApi?.match) throw errors.notFound();
   const descriptor = deps.protectedApi.match(request.method, url);
   if (!descriptor) throw errors.notFound();
-  deps.rateLimiter.consume(`api:${remoteKey(request)}`);
-  const record = await resolveSession(request, deps);
+  const tooling = url.pathname.startsWith('/api/tooling/');
+  if (!tooling) deps.rateLimiter.consume(`api:${remoteKey(request)}`);
+  const record = tooling ? await resolveToolingSession(request, deps) : await resolveSession(request, deps);
   const expectedTenant = request.headers['x-atlas-tooling-tenant'];
-  if (url.pathname.startsWith('/api/tooling/') && expectedTenant !== undefined &&
-      expectedTenant !== encodeURIComponent(record.activeTenant)) {
+  if (tooling && expectedTenant !== undefined && expectedTenant !== encodeURIComponent(record.activeTenant)) {
     throw new EdgeError('TOOLING_TENANT_CHANGED', 'Reopen Tooling for the active tenant.', 412);
   }
-  if (descriptor.mutation) {
-    requireOrigin(request, deps.config);
-    await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);
+  const release = tooling ? deps.toolingLimiter.acquire({ tenantId: record.activeTenant, userId: record.userId }, descriptor) : () => {};
+  try {
+    if (descriptor.mutation) {
+      requireOrigin(request, deps.config);
+      await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);
+    }
+    const scope = await authorize(deps, record, descriptor.operation, descriptor.capability);
+    const context = Object.freeze({ ...scope, correlationId: requestId, authenticatedAt: record.authenticatedAt, sessionReference: record.id });
+    const input = descriptor.binary ? await binaryBody(request, descriptor.maxBytes) : descriptor.body === false ? {} : await jsonBody(request);
+    const data = await descriptor.execute(context, input, url, request);
+    await deps.sessions.touch(record);
+    await audit(deps, requestId, descriptor.operation, 'AUTHORIZED', { session: record.id, tenantId: context.tenantId, actorUserId: context.userId });
+    return sendJson(response, descriptor.status || 200, { state: 'LOADED', data, correlationId: requestId });
+  } finally { release(); }
+}
+
+async function resolveToolingSession(request, deps) {
+  const key = `tooling-anonymous:${remoteKey(request)}`;
+  let opaque;
+  try { opaque = parseCookies(request.headers.cookie)[SESSION_COOKIE]; } catch { /* Malformed cookies are anonymous. */ }
+  if (!validOpaque(opaque)) {
+    deps.rateLimiter.consume(key);
+    throw errors.unauthenticated();
   }
-  const authorized = await authorize(deps, record, descriptor.operation, descriptor.capability);
-  const context = Object.freeze({ ...authorized, correlationId: requestId, authenticatedAt: record.authenticatedAt, sessionReference: record.id });
-  const input = descriptor.binary ? await binaryBody(request, descriptor.maxBytes) : descriptor.body === false ? {} : await jsonBody(request);
-  const data = await descriptor.execute(context, input, url, request);
-  await deps.sessions.touch(record);
-  await audit(deps, requestId, descriptor.operation, 'AUTHORIZED', { session: record.id, tenantId: context.tenantId, actorUserId: context.userId });
-  return sendJson(response, descriptor.status || 200, { state: 'LOADED', data, correlationId: requestId });
+  deps.toolingLookupLimiter.consume(remoteKey(request));
+  if (deps.toolingChecks >= 64) throw rateLimitError('authorization-concurrency', 64, 1000);
+  deps.toolingChecks++;
+  try {
+    return await deps.sessions.resolve(opaque);
+  } catch (error) {
+    if (error.status === 401) deps.rateLimiter.consume(key);
+    throw error;
+  } finally {
+    deps.toolingChecks--;
+  }
 }
 
 async function authorize(deps, record, operation, requiredCapability) {
