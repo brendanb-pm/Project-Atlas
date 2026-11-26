@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tooling | Atlas</title>
+<link rel="stylesheet" href="/tooling.css">
+<main data-tooling-write="TOOLING_WRITE_ALLOWED" data-attachment-write="ATTACHMENT_WRITE_ALLOWED" data-tenant="TOOLING_ACTIVE_TENANT">
+  <h1>Tooling</h1>
+  <form id="search">
+    <label for="query">Search by tool ID, description, location or diameter</label>
+    <input id="query" name="query" type="search" maxlength="100">
+    <button>Search</button>
+  </form>
+  <p id="search-status" role="status"></p>
+  <ul id="results" aria-label="Tool search results"></ul>
+  <section aria-labelledby="tool-heading">
+    <h2 id="tool-heading" tabindex="-1">Tool details</h2>
+    <p id="status" role="status" tabindex="-1">Select a tool to see details.</p>
+    <div id="selected" hidden>
+      <dl id="details"></dl>
+      <h3>Evidence</h3>
+      <p id="evidence-status" role="status"></p>
+      <ul id="evidence"></ul>
+      <button type="button" id="more-evidence" hidden>Load more evidence</button>
+      <form id="upload" hidden>
+        <label for="file">Inspection or other evidence file</label>
+        <input id="file" name="file" type="file" required>
+        <button>Upload evidence</button>
+      </form>
+      <h3>Tool and regrind history</h3>
+      <p id="history-status" role="status"></p>
+      <ol id="history"></ol>
+      <div id="writes" hidden>
+        <h3>Record regrind</h3>
+        <form id="regrind">
+          <p><label for="diameter">Measured diameter <span id="units"></span></label>
+          <input id="diameter" name="diameter" type="number" step="any" required></p>
+          <p><label for="reason">Reason</label>
+          <input id="reason" name="reason" maxlength="1000" required></p>
+          <p><label for="attachment">Evidence</label>
+          <select id="attachment" name="attachment"></select></p>
+          <button>Save regrind</button>
+        </form>
+        <h3>Physical locator</h3>
+        <form id="rotate">
+          <label><input type="checkbox" required> Replace the current locator and invalidate the old one</label>
+          <button>Rotate locator</button>
+        </form>
+        <div id="locator-result" hidden>
+          <p id="locator" tabindex="-1"></p>
+          <button type="button" id="acknowledge-locator">I've captured the locator</button>
+        </div>
+        <button type="button" id="review-regrind" hidden>Discard the reviewed regrind draft</button>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/tooling-client.js"></script>

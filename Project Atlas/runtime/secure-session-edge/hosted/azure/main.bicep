@@ -8,10 +8,15 @@ param sshPublicKey string
 @description('Operator public IPv4 address with an explicit /32.')
 param operatorSshCidr string
 param vmAdminUsername string = 'atlasoperator'
+@description('Exact Ubuntu 24.04 server image version verified in the selected region. Record it in the approval evidence.')
+param ubuntuImageVersion string
 @secure()
 param postgresAdminPassword string
 
-var location = 'westus2'
+@description('Azure region verified for the exact subscription and resource configuration.')
+param location string
+@description('Ubuntu x64 VM SKU verified in the selected region.')
+param vmSize string
 var tags = {
   project: 'Atlas'
   story: 'MOS-140C'
@@ -51,6 +56,19 @@ resource securityGroup 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
           sourcePortRange: '*'
           destinationPortRanges: ['80', '443']
           sourceAddressPrefix: 'Internet'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'deny-other-inbound'
+        properties: {
+          priority: 120
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
         }
       }
@@ -167,13 +185,13 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   location: location
   tags: tags
   properties: {
-    hardwareProfile: { vmSize: 'Standard_B2s' }
+    hardwareProfile: { vmSize: vmSize }
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
         offer: 'ubuntu-24_04-lts'
         sku: 'server'
-        version: 'latest'
+        version: ubuntuImageVersion
       }
       osDisk: {
         diskSizeGB: 64
