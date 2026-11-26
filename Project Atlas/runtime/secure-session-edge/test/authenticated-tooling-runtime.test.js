@@ -145,6 +145,7 @@ test('hosted Tooling supports keyboard selection, evidence, regrind and locator 
   await page.route('**/attachments', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
     uploadKeys.push(route.request().headers()['x-atlas-idempotency-key']);
+    if (uploadKeys.length === 2) return route.fulfill({ status: 429 });
     if (uploadKeys.length !== 1) return route.continue();
     assert.equal((await route.fetch()).status(), 201);
     await route.abort();
@@ -152,9 +153,11 @@ test('hosted Tooling supports keyboard selection, evidence, regrind and locator 
   await page.getByRole('button', { name: 'Upload evidence' }).press('Enter');
   await page.locator('#status').getByText(/save result is uncertain/).waitFor();
   await page.getByRole('button', { name: 'Upload evidence' }).press('Enter');
+  await page.locator('#status').getByText(/Too many requests/).waitFor();
+  await page.getByRole('button', { name: 'Upload evidence' }).press('Enter');
   await page.locator('#status').getByText('Saved.', { exact: true }).waitFor();
-  assert.equal(uploadKeys.length, 2);
-  assert.equal(uploadKeys[0], uploadKeys[1]);
+  assert.equal(uploadKeys.length, 3);
+  assert.equal(new Set(uploadKeys).size, 1);
   await page.locator('#evidence').getByText(/inspection.txt/).waitFor({ timeout: 5000 }).catch(async (error) => { throw new Error(await page.locator('#status').textContent(), { cause: error }); });
   await page.getByLabel(/Measured diameter/).fill('0.475');
   await page.getByLabel('Reason').fill('Synthetic regrind');

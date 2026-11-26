@@ -88,7 +88,7 @@ async function search(query, generation) {
           return;
         }
         const different = selectedId !== tool.toolInstanceId;
-        if (different && (regrindVersion !== undefined || uploadAttempt)) {
+        if (different && (regrindVersion !== undefined || uploadAttempt || uncertainRotation)) {
           status('status', 'Resolve the pending save for this tool before selecting another.');
           byId('status').focus();
           return;
@@ -213,6 +213,7 @@ function mutation(formId, action) {
       return;
     }
     const tool = current;
+    const retryingUpload = formId === 'upload' && uploadAttempt !== undefined;
     const fields = new FormData(form);
     busy = true;
     const controls = [...document.querySelectorAll('#selected button, #selected input, #selected select, #results button')];
@@ -240,7 +241,7 @@ function mutation(formId, action) {
       const ambiguous = sent && (!error.status || error.status >= 500);
       if (ambiguous && formId === 'rotate') uncertainRotation = true;
       if ((ambiguous || error.status === 409) && formId === 'regrind') regrindVersion ??= tool.version;
-      if (formId === 'upload' && !ambiguous) uploadAttempt = undefined;
+      if (formId === 'upload' && !ambiguous && !retryingUpload) uploadAttempt = undefined;
       await select(tool);
       if (staleSession) return;
       byId('review-regrind').hidden = regrindVersion === undefined || !current;
