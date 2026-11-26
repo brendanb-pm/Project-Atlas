@@ -11,6 +11,9 @@ const MAX_BODY = 8192;
 const workOrderPage = readFileSync(new URL('./work-order.html', import.meta.url));
 const workOrderClient = readFileSync(new URL('./work-order-client.js', import.meta.url));
 const workOrderStyles = readFileSync(new URL('./work-order.css', import.meta.url));
+const toolingPage = readFileSync(new URL('./tooling.html', import.meta.url), 'utf8');
+const toolingClient = readFileSync(new URL('./tooling-client.js', import.meta.url));
+const toolingStyles = readFileSync(new URL('./tooling.css', import.meta.url));
 
 export function createEdgeConfig(input = {}) {
   const environment = input.environment || 'preproduction';
@@ -77,6 +80,20 @@ function createHandler(deps) {
       if (request.method === 'POST' && url.pathname === '/auth/tenant-select') return await selectTenant(request, response, deps, requestId);
       if (request.method === 'POST' && url.pathname === '/auth/logout') return await logout(request, response, deps, requestId);
       if (request.method === 'GET' && url.pathname === '/preproduction/context') return await contextHarness(request, response, deps, requestId);
+      if (request.method === 'GET' && ['/tooling', '/tooling-client.js', '/tooling.css'].includes(url.pathname)) {
+        const descriptor = deps.protectedApi?.match('GET', new URL('/api/tooling/tools', deps.config.origin));
+        if (!descriptor) throw errors.notFound();
+        const record = await resolveSession(request, deps);
+        const authority = await authorize(deps, record, descriptor.operation, descriptor.capability);
+        await deps.sessions.touch(record);
+        const page = url.pathname === '/tooling';
+        const styles = url.pathname === '/tooling.css';
+        response.writeHead(200, { 'Content-Type': (page ? 'text/html' : styles ? 'text/css' : 'text/javascript') + '; charset=utf-8' });
+        return response.end(page ? toolingPage
+          .replace('TOOLING_WRITE_ALLOWED', String(authority.capabilities.includes('TOOLING_WRITE')))
+          .replace('TOOLING_ACTIVE_TENANT', encodeURIComponent(authority.tenantId))
+          .replace('ATTACHMENT_WRITE_ALLOWED', String(authority.capabilities.includes('ATTACHMENT_WRITE'))) : styles ? toolingStyles : toolingClient);
+      }
       if (deps.workOrders && (url.pathname === '/api/work-orders' || url.pathname.startsWith('/api/work-orders/') ||
           url.pathname === '/work-orders' || url.pathname === '/work-order-client.js' || url.pathname === '/work-order.css')) {
         return await workOrderRequest(request, response, deps, url, requestId);
@@ -196,6 +213,11 @@ async function protectedRequest(request, response, deps, url, requestId) {
   if (!descriptor) throw errors.notFound();
   deps.rateLimiter.consume(`api:${remoteKey(request)}`);
   const record = await resolveSession(request, deps);
+  const expectedTenant = request.headers['x-atlas-tooling-tenant'];
+  if (url.pathname.startsWith('/api/tooling/') && expectedTenant !== undefined &&
+      expectedTenant !== encodeURIComponent(record.activeTenant)) {
+    throw new EdgeError('TOOLING_TENANT_CHANGED', 'Reopen Tooling for the active tenant.', 412);
+  }
   if (descriptor.mutation) {
     requireOrigin(request, deps.config);
     await deps.sessions.validateCsrf(record, request.headers['x-atlas-csrf']);

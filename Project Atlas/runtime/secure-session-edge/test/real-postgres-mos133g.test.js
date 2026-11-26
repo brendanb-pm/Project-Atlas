@@ -416,6 +416,10 @@ if (!ENABLED) {
       const page = await fetch(base + '/work-orders', { headers: cookies });
       assert.equal(page.status, 200);
       assert.match(await page.text(), /Production work orders/);
+      assert.equal((await fetch(base + '/tooling')).status, 401);
+      const toolingPage = await fetch(base + '/tooling', { headers: cookies });
+      assert.equal(toolingPage.status, 200);
+      assert.match(await toolingPage.text(), /data-tooling-write="false"/);
       assert.equal((await fetch(base + '/api/tooling/tools', { headers: cookies })).status, 200);
       assert.equal((await fetch(base + '/api/work-orders', { headers: cookies })).status, 200);
       const record = await fetch(base + '/api/work-orders/' + jobId, {
@@ -435,6 +439,7 @@ if (!ENABLED) {
       assert.equal(accepted.status, 200);
       assert.equal((await workOrders().read(operator, webJob)).approved.approved_by_user_id, operator.userId);
       authority.memberships[0].capabilities = ['WORK_ORDER_READ', 'CORE_RECORD_READ'];
+      assert.equal((await fetch(base + '/tooling', { headers: cookies })).status, 403);
       const noApproval = await fetch(base + '/api/work-orders/' + jobId + '/approve', {
         method: 'POST', headers: { ...cookies, origin, 'x-atlas-csrf': session.csrf,
           'x-atlas-capabilities': 'WORK_ORDER_APPROVE', 'content-type': 'application/json' },

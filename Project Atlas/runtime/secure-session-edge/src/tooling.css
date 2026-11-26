@@ -1,0 +1,35 @@
+:root {
+  color: #182536;
+  background: #f4f7fa;
+  font: 100%/1.5 system-ui, sans-serif;
+}
+
+main {
+  max-width: 60rem;
+  margin: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  overflow-wrap: anywhere;
+}
+
+section, form {
+  margin-block: 1rem;
+  padding: 1rem;
+  background: white;
+  border: 1px solid #a9b5c2;
+  border-radius: .5rem;
+}
+
+button, input, select {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 2.75rem;
+  font: inherit;
+}
+
+button { padding: .35rem .75rem; }
+label { display: block; }
+input[type="checkbox"] { min-height: auto; }
+li { margin-block: .4rem; }
+dt { font-weight: 650; }
+dd { margin: 0 0 .65rem; }
+:focus-visible { outline: 3px solid #1458a0; outline-offset: 3px; }
