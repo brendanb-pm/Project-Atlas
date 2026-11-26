@@ -31,7 +31,9 @@ test('principal and tenant excess are isolated and report the relevant window', 
   now = 5000;
   gate.consume(scope('4'), 1);
   for (const offset of [5000, 10000, 15000]) { now = offset; for (let i = 0; i < 22; i++) gate.consume(scope('1'), 1); }
-  assert.throws(() => gate.consume(scope('1'), 1), { throttle: { scope: 'principal', limit: 90, retryAfter: 45 } });
+  now = 20000;
+  for (let i = 0; i < 15; i++) gate.consume(scope('1'), 1);
+  assert.throws(() => gate.consume(scope('1'), 1), { throttle: { scope: 'principal', limit: 105, retryAfter: 40 } });
 });
 
 test('admission state remains bounded and expired capacity is reclaimed', () => {
@@ -43,6 +45,19 @@ test('admission state remains bounded and expired capacity is reclaimed', () => 
   now = 60000;
   gate.consume({ tenantId: 'B', userId: '2' }, 1);
   assert.equal(gate.events.size, 4);
+});
+
+test('tenant minute ceiling survives principal rotation and overrides a shorter burst wait', () => {
+  let now = 0;
+  const gate = new ToolingRateLimiter({ clock: () => new Date(now) });
+  const roundLoads = [60, 60, 60, 63, 72];
+  for (let round = 0; round < roundLoads.length; round++) {
+    now = round * 5000;
+    for (let i = 0; i < roundLoads[round]; i++) gate.consume({ tenantId: 'A', userId: String(i % 4) }, 1);
+  }
+  assert.throws(() => gate.consume({ tenantId: 'A', userId: 'new' }, 1),
+    { throttle: { scope: 'tenant', limit: 315, retryAfter: 40 } });
+  gate.consume({ tenantId: 'B', userId: 'new' }, 1);
 });
 
 test('upload concurrency is bounded per tenant and released after completion', () => {

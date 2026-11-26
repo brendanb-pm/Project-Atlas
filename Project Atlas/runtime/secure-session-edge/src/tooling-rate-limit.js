@@ -4,9 +4,9 @@ const minute = 60_000;
 const burst = 5_000;
 const rules = Object.freeze([
   { scope: 'principal-burst', window: burst, limit: 24 },
-  { scope: 'principal', window: minute, limit: 90 },
+  { scope: 'principal', window: minute, limit: 105 },
   { scope: 'tenant-burst', window: burst, limit: 72 },
-  { scope: 'tenant', window: minute, limit: 270 }
+  { scope: 'tenant', window: minute, limit: 315 }
 ]);
 
 export function rateLimitError(scope, limit, waitMs) {

@@ -35,8 +35,12 @@ async function fixture() {
   const tooling = new ToolingTraceabilityService({ repository: new PostgresToolingRepository({ runtime: app }) });
   const storage = new ObjectStorageRouter({ provider: 'TEST', adapters: { TEST: new InMemoryObjectStorageAdapter() } });
   const attachments = new ContextualAttachmentService({ repository: new PostgresContextualAttachmentRepository({ runtime: app }), storage });
-  const edge = createTenantEdge({ config: { environment: 'preproduction', origin: ORIGIN, sessionStoreKind: 'postgresql', allowedRoutes: ['tooling'], providers: { GOOGLE: config } }, providers: { GOOGLE: provider }, authority, sessionStore: new PostgresSessionStore({ runtime: app }), attemptStore: new PostgresAuthAttemptStore({ runtime: app }), protectedApi: new ToolingProtectedApi({ tooling, attachments }) });
+  // These tests compress a manual workflow. Advance the clock between requests;
+  // the dedicated limiter suite checks actual burst and sustained budgets.
+  let simulatedTime = Date.now();
+  const edge = createTenantEdge({ config: { environment: 'preproduction', origin: ORIGIN, sessionStoreKind: 'postgresql', allowedRoutes: ['tooling'], providers: { GOOGLE: config } }, providers: { GOOGLE: provider }, authority, sessionStore: new PostgresSessionStore({ runtime: app }), attemptStore: new PostgresAuthAttemptStore({ runtime: app }), protectedApi: new ToolingProtectedApi({ tooling, attachments }), clock: () => new Date(simulatedTime) });
   const server = createHttpServer(edge); await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  server.prependListener('request', () => { simulatedTime += 1000; });
   const baseUrl = `http://127.0.0.1:${server.address().port}`, jar = new Map();
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) }; if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; '); if (options.method && options.method !== 'GET') headers.origin ??= ORIGIN;
