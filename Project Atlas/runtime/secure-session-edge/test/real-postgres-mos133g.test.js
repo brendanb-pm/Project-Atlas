@@ -445,4 +445,46 @@ if (!ENABLED) {
       await new Promise((resolve) => server.close(resolve));
     }
   });
+  test('PostgreSQL connection loss evicts idle clients and never replays a failed write', { timeout: 10000 }, async () => {
+    const logs = [];
+    const runtime = new PostgresRuntime(applicationConfig, { log: (entry) => logs.push(entry) });
+    const committed = 'CUST-RECOVERY-COMMITTED';
+    const interrupted = 'CUST-RECOVERY-INTERRUPTED';
+    const terminate = async (pid) => {
+      const { rows: [result] } = await admin.query('SELECT pg_terminate_backend($1, 5000) AS stopped', [pid]);
+      assert.equal(result.stopped, true);
+    };
+    const count = async (id) => (await runtime.query(
+      'SELECT count(*)::int AS count FROM atlas_customers WHERE tenant_id=$1 AND customer_id=$2', [TENANT, id]
+    )).rows[0].count;
+    try {
+      await seedCustomer(runtime, customer(committed));
+      const idle = (await runtime.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      // Observe the safe log through the runtime rather than adding a test listener that masks the crash.
+      await terminate(idle);
+      for (let poll = 0; poll < 50 && !logs.some((entry) => entry.operation === 'POSTGRES_IDLE_CONNECTION'); poll += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.deepEqual(logs.find((entry) => entry.operation === 'POSTGRES_IDLE_CONNECTION'), {
+        operation: 'POSTGRES_IDLE_CONNECTION', outcome: 'TEMPORARY_FAILURE'
+      });
+      const replacement = (await runtime.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      assert.notEqual(replacement, idle);
+      let attempts = 0;
+      await assert.rejects(runtime.withTransaction('INTERRUPT_WRITE', async (tx) => {
+        attempts += 1;
+        await seedCustomer(tx, customer(interrupted));
+        const pid = (await tx.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        await terminate(pid);
+      }, { retryable: true }), { code: 'PERSISTENCE_UNAVAILABLE' });
+      assert.equal(attempts, 1);
+      assert.equal(await count(interrupted), 0);
+      assert.equal(await count(committed), 1);
+      await seedCustomer(runtime, customer(interrupted));
+      await assert.rejects(seedCustomer(runtime, customer(interrupted)), { code: 'CONFLICT' });
+      assert.equal(await count(interrupted), 1);
+    } finally {
+      await runtime.close();
+    }
+  });
 }
