@@ -21,6 +21,15 @@ export class PostgresRuntime {
   constructor(config, { PoolCtor = Pool, log = () => {}, pool } = {}) {
     if (!config || !['APPLICATION', 'MIGRATION'].includes(config.role)) throw new Error('PostgreSQL role configuration is invalid.');
     this.config = config; this.log = log; this.pool = pool || new PoolCtor({ host: config.host, port: config.port, database: config.database, user: config.user, password: config.password, max: config.pool.max, idleTimeoutMillis: config.pool.idleTimeoutMs, connectionTimeoutMillis: config.pool.connectionTimeoutMs, ssl: config.tls.required ? { rejectUnauthorized: config.tls.rejectUnauthorized, ca: config.tls.ca } : false, options: `-c statement_timeout=${config.pool.statementTimeoutMs}`, application_name: 'atlas-tenant-runtime' });
+    // pg-pool has already removed the failed idle client when it emits this event.
+    this.pool.on?.('error', (error) => {
+      this.log({ operation: 'POSTGRES_IDLE_CONNECTION', outcome: classifyPgError(error) });
+    });
+    // A checked-out client can lose its socket between queries. pg marks it unusable;
+    // attaching a listener keeps the next query or COMMIT responsible for surfacing failure.
+    this.pool.on?.('connect', (client) => {
+      client.on?.('error', () => {});
+    });
   }
   async query(text, values = [], operation = 'QUERY') {
     const started = performance.now();
