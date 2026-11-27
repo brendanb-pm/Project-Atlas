@@ -1,0 +1,64 @@
+# Overlay for compose.yml. Run only in the dedicated synthetic installation.
+x-atlas-image: &atlas-image
+  build: !reset null
+  image: ${ACCEPTANCE_APP_IMAGE:?Set the verified Atlas application image digest}
+  platform: linux/amd64
+
+services:
+  postgres:
+    image: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD_FILE: /db-config/bootstrap-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    entrypoint: [/bin/sh, /etc/atlas/start-postgres.sh]
+    command: [postgres, -c, ssl=on, -c, ssl_cert_file=/run/atlas-tls/server.crt, -c, ssl_key_file=/run/atlas-tls/server.key, -c, hba_file=/etc/atlas/pg_hba.conf]
+    tmpfs:
+      - /run/atlas-tls
+    volumes:
+      - type: bind
+        source: ${ACCEPTANCE_DB_DATA:?Set the existing mounted acceptance database directory}
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ACCEPTANCE_DB_CONFIG:?Set the restricted database configuration directory}
+        target: /db-config
+        read_only: true
+        bind:
+          create_host_path: false
+      - ./single-vm.pg_hba.conf:/etc/atlas/pg_hba.conf:ro
+      - ./single-vm.start-postgres.sh:/etc/atlas/start-postgres.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    logging:
+      driver: local
+
+  application:
+    <<: *atlas-image
+    restart: 'on-failure:3'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [default, database]
+
+  proxy:
+    image: caddy:2-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    platform: linux/amd64
+    restart: unless-stopped
+
+  migrate:
+    <<: *atlas-image
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [database]
+
+networks:
+  database:
+    internal: true
